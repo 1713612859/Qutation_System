@@ -1,0 +1,1 @@
+package com.example.quotation.mapper; import com.baomidou.mybatisplus.core.mapper.BaseMapper; import com.example.quotation.entity.PackageItem; public interface PackageItemMapper extends BaseMapper<PackageItem> {}
