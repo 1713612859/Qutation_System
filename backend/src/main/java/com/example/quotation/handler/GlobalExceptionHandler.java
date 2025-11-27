@@ -7,6 +7,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.Objects;
+
 /**
  * 全局异常处理器
  */
@@ -27,7 +29,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ApiResponse<?> handleValidationException(MethodArgumentNotValidException e) {
-        String msg = e.getBindingResult().getFieldError().getDefaultMessage();
+        String msg = Objects.requireNonNull(e.getBindingResult().getFieldError()).getDefaultMessage();
         return ApiResponse.error(msg);
     }
 
