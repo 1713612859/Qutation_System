@@ -15,7 +15,7 @@
 
 ### 前端
 - Vue 3
-- Element Plus
+- Vuetify
 - Vue Router
 - Axios
 - Vite
