@@ -1,316 +1,359 @@
 <template>
   <div id="quotation-preview-area">
-    <div class="d-flex align-center mb-2 mb-sm-4">
-      <v-btn
-          icon
-          variant="text"
-          size="large"
-          class="mr-3"
-          @click="$router.go(-1)"
-          color="grey-darken-2"
-          aria-label="Back"
-      >
-        <v-icon>mdi-arrow-left</v-icon>
-      </v-btn>
-      <h2 class="text-h5 text-sm-h4 ma-0">
-        {{ quotation.id ? 'Edit Quotation' : 'New Quotation' }}
-      </h2>
-    </div>
+    <v-form ref="form" v-model="valid" lazy-validation>
 
-    <v-card class="mb-2 mb-sm-4">
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" md="6">
-            <v-text-field
-                v-model="quotation.quoteNumber"
-                label="Quote Number"
-                disabled
-                density="compact"
-                class="mb-2 mb-sm-0"
-            ></v-text-field>
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-                v-model="quotation.title"
-                label="Title"
-                density="compact"
-            ></v-text-field>
-          </v-col>
-        </v-row>
-        <v-row>
-          <v-col cols="12" md="2">
-            <v-select
-                v-model="quotation.salutation"
-                :items="salutations"
-                label="Salutation"
-                density="compact"
-            ></v-select>
-          </v-col>
-          <v-col cols="12" md="4">
-            <v-autocomplete
-                v-model="quotation.customerId"
-                :items="customers"
-                item-title="companyName"
-                item-value="id"
-                label="Company Name"
-                density="compact"
-                @update:model-value="onCustomerChange"
-                clearable
-            >
-              <template v-slot:item="{ props, item: customerItem }">
-                <v-list-item v-bind="props">
-                  <template v-slot:title>
-                    {{ customerItem.raw.companyName }}
-                  </template>
-                  <template v-slot:subtitle>
-                    <span v-if="customerItem.raw.customerName">
-                      Attn: {{ customerItem.raw.customerName }}
-                    </span>
-                    <span v-if="customerItem.raw.contactName">
-                      | Contact: {{ customerItem.raw.contactName }}
-                    </span>
-                  </template>
-                </v-list-item>
-              </template>
-            </v-autocomplete>
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-                v-model="quotation.currency"
-                label="Currency"
-                density="compact"
-            ></v-text-field>
-          </v-col>
-        </v-row>
-        <v-row>
-          <v-col cols="12" md="6">
-            <v-text-field
-                v-model="quotation.issueDate"
-                type="date"
-                label="Issue Date"
-                density="compact"
-            ></v-text-field>
-          </v-col>
-          <v-col cols="12" md="6">
-            <v-text-field
-                v-model="quotation.expiryDate"
-                type="date"
-                label="Expiry Date"
-                density="compact"
-            ></v-text-field>
-          </v-col>
-        </v-row>
-        <v-row>
-          <v-col cols="12">
-            <v-select
-                v-model="selectedPackageId"
-                :items="packages"
-                item-title="name"
-                item-value="id"
-                label="Load from Package"
-                placeholder="Select Package"
-                density="compact"
-                clearable
-                @update:model-value="loadFromPackage"
-            ></v-select>
-          </v-col>
-        </v-row>
-        <v-row>
-          <v-col cols="12">
-            <v-textarea
-                v-model="quotation.notes"
-                label="Notes"
-                placeholder="Please enter quotation notes..."
-                rows="5"
-                variant="outlined"
-                density="comfortable"
-                auto-grow
-            ></v-textarea>
-          </v-col>
-        </v-row>
-      </v-card-text>
-    </v-card>
-
-    <v-card class="mb-2 mb-sm-4">
-      <v-card-title class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center">
-        <span class="text-subtitle-1 text-sm-h6 mb-2 mb-sm-0">Quotation Details</span>
-        <v-btn color="primary" size="small" class="align-self-start align-self-sm-auto" @click="addItem">
-          <v-icon left size="small">mdi-plus</v-icon>
-          <span class="d-none d-sm-inline">Add Product</span>
-          <span class="d-sm-none">Add</span>
-        </v-btn>
-      </v-card-title>
-
-      <v-card-text class="pa-1 pa-sm-4">
-
-        <v-data-table
-            :headers="headers"
-            :items="quotation.items"
-            item-value="lineNumber"
-            :items-per-page="-1"
-            hide-default-footer
-            class="d-none d-md-block elevation-1"
+      <div class="d-flex align-center mb-2 mb-sm-4">
+        <v-btn
+            icon
+            variant="text"
+            size="large"
+            class="mr-3"
+            @click="$router.go(-1)"
+            color="grey-darken-2"
+            aria-label="Back"
         >
-          <template v-slot:item.lineNumber="{ index }">
-            {{ index + 1 }}
-          </template>
+          <v-icon>mdi-arrow-left</v-icon>
+        </v-btn>
+        <h2 class="text-h5 text-sm-h4 ma-0">
+          {{ quotation.id ? 'Edit Quotation' : 'New Quotation' }}
+        </h2>
+      </div>
 
-          <template v-slot:item.product="{ item, index }">
-            <div class="product-name-wrapper">
-              <v-autocomplete
-                  v-model="item.productId"
-                  :items="products"
-                  item-title="name"
-                  item-value="id"
+      <v-card class="mb-2 mb-sm-4">
+        <v-card-text>
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-text-field
+                  v-model="quotation.quoteNumber"
+                  label="Quote Number"
+                  disabled
                   density="compact"
-                  hide-details
-                  @update:model-value="() => onProductChange(item, index)"
-                  :style="{ minWidth: '180px' }"
+                  class="mb-2 mb-sm-0"
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                  v-model="quotation.title"
+                  :rules="[rules.required]"
+                  label="Title"
+                  density="compact"
+              ></v-text-field>
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12" md="2">
+              <v-select
+                  v-model="quotation.salutation"
+                  :items="salutations"
+                  label="Salutation"
+                  density="compact"
+              ></v-select>
+            </v-col>
+            <v-col cols="12" md="4">
+              <v-autocomplete
+                  v-model="quotation.customerId"
+                  :items="customers"
+                  item-title="customerName"
+                  item-value="id"
+                  label="Customer Name"
+                  density="compact"
+                  :rules="[rules.required]"
+                  required
+                  @update:model-value="onCustomerChange"
                   clearable
               >
-                <template v-slot:item="{ props, item: productItem }">
+                <template v-slot:item="{ props, item: customerItem }">
                   <v-list-item v-bind="props">
                     <template v-slot:title>
-                      {{ productItem.raw.name }}
+                      {{ customerItem.raw.companyName }}
                     </template>
                     <template v-slot:subtitle>
-                      SKU: {{ productItem.raw.sku || 'N/A' }}
+                      <span v-if="customerItem.raw.customerName">
+                        Attn: {{ customerItem.raw.customerName }}
+                      </span>
+                      <span v-if="customerItem.raw.contactName">
+                        | Contact: {{ customerItem.raw.contactName }}
+                      </span>
                     </template>
                   </v-list-item>
                 </template>
               </v-autocomplete>
-              <p v-if="item.packageName || item.description" class="text-caption text-grey-darken-1 mt-1 mb-0 text-left">
-                <span v-if="item.packageName" class="text-primary mr-1 font-weight-bold">
-                      [{{ item.packageName }}]
-                </span>
-                {{ item.description }}
-              </p>
-              <p v-if="item.specifications" class="text-caption text-info mt-1 mb-0 text-left">
-                <strong>Specs:</strong> {{ item.specifications }}
-              </p>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                  v-model="quotation.currency"
+                  label="Currency"
+                  density="compact"
+              ></v-text-field>
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12" md="6">
+              <v-text-field
+                  v-model="quotation.issueDate"
+                  type="date"
+                  label="Issue Date"
+                  density="compact"
+                  :rules="[rules.required]"
+                  required
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field
+                  v-model="quotation.expiryDate"
+                  type="date"
+                  label="Expiry Date"
+                  density="compact"
+                  :rules="[rules.required]"
+                  required
+              ></v-text-field>
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12">
+              <v-select
+                  v-model="selectedPackageId"
+                  :items="packages"
+                  item-title="name"
+                  item-value="id"
+                  label="Load from Package"
+                  placeholder="Select Package"
+                  density="compact"
+                  clearable
+                  @update:model-value="loadFromPackage"
+              ></v-select>
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12">
+              <v-textarea
+                  v-model="quotation.notes"
+                  label="Notes"
+                  placeholder="Please enter quotation notes..."
+                  rows="5"
+                  variant="outlined"
+                  density="comfortable"
+                  auto-grow
+              ></v-textarea>
+            </v-col>
+          </v-row>
+        </v-card-text>
+      </v-card>
+
+      <v-card class="mb-2 mb-sm-4">
+        <v-card-title class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center">
+          <span class="text-subtitle-1 text-sm-h6 mb-2 mb-sm-0">Quotation Details</span>
+          <v-btn color="primary" size="small" class="align-self-start align-self-sm-auto" @click="addItem">
+            <v-icon left size="small">mdi-plus</v-icon>
+            <span class="d-none d-sm-inline">Add Product</span>
+            <span class="d-sm-none">Add</span>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-1 pa-sm-4">
+
+          <v-data-table
+              :headers="headers"
+              :items="quotation.items"
+              item-value="lineNumber"
+              :items-per-page="-1"
+              hide-default-footer
+              class="d-none d-md-block elevation-1"
+          >
+            <template v-slot:item.lineNumber="{ index }">
+              {{ index + 1 }}
+            </template>
+
+            <template v-slot:item.product="{ item, index }">
+              <div class="product-name-wrapper">
+                <v-autocomplete
+                    v-model="item.productId"
+                    :items="products"
+                    item-title="name"
+                    item-value="id"
+                    density="compact"
+                    hide-details="auto"
+                    :rules="[rules.required]"
+                    @update:model-value="() => onProductChange(item, index)"
+                    :style="{ minWidth: '180px' }"
+                    clearable
+                    placeholder="Select Product"
+                >
+                  <template v-slot:item="{ props, item: productItem }">
+                    <v-list-item v-bind="props">
+                      <template v-slot:title>
+                        {{ productItem.raw.name }}
+                      </template>
+                      <template v-slot:subtitle>
+                        SKU: {{ productItem.raw.sku || 'N/A' }}
+                      </template>
+                    </v-list-item>
+                  </template>
+                </v-autocomplete>
+                <p v-if="item.packageName || item.description" class="text-caption text-grey-darken-1 mt-1 mb-0 text-left">
+                  <span v-if="item.packageName" class="text-primary mr-1 font-weight-bold">
+                        [{{ item.packageName }}]
+                  </span>
+                  {{ item.description }}
+                </p>
+                <p v-if="item.specifications" class="text-caption text-info mt-1 mb-0 text-left">
+                  <strong>Specs:</strong> {{ item.specifications }}
+                </p>
+              </div>
+            </template>
+
+            <template v-slot:item.quantity="{ item }">
+              <v-text-field
+                  v-model.number="item.quantity"
+                  type="number"
+                  density="compact"
+                  hide-details="auto"
+                  :rules="[rules.required, rules.positive]"
+                  @update:model-value="calculateLine(item)"
+              ></v-text-field>
+            </template>
+
+            <template v-slot:item.unitPrice="{ item }">
+              <v-text-field
+                  v-model.number="item.unitPrice"
+                  type="number"
+                  density="compact"
+                  hide-details="auto"
+                  :rules="[rules.required]"
+                  @update:model-value="calculateLine(item)"
+              ></v-text-field>
+            </template>
+
+            <template v-slot:item.discount="{ item }">
+              <v-text-field
+                  v-if="isSuperAdmin"
+                  v-model.number="item.discount"
+                  type="number"
+                  density="compact"
+                  hide-details="auto"
+                  @update:model-value="calculateLine(item)"
+              ></v-text-field>
+              <span v-else class="text-body-2">{{ item.discount || 0 }}%</span>
+            </template>
+
+            <template v-slot:item.lineTotal="{ item }">
+              {{ item.lineTotal }}
+            </template>
+
+            <template v-slot:item.actions="{ index }">
+              <v-btn icon size="small" color="error" @click="removeItem(index)">
+                <v-icon>mdi-delete</v-icon>
+              </v-btn>
+            </template>
+          </v-data-table>
+
+          <div class="d-md-none">
+            <v-list density="compact" class="pa-0">
+              <v-list-item v-for="(item, index) in quotation.items" :key="index" class="mb-3 pa-0 mobile-item-card">
+                <v-card variant="outlined">
+                  <v-card-text>
+                    <div class="d-flex justify-space-between align-center mb-2">
+                      <span class="text-subtitle-2 font-weight-bold">#{{ index + 1 }} {{ item.productName || 'Select Product' }}</span>
+                      <v-btn icon size="x-small" color="error" @click="removeItem(index)">
+                        <v-icon size="small">mdi-delete</v-icon>
+                      </v-btn>
+                    </div>
+
+                    <p v-if="item.packageName || item.description" class="text-caption text-grey-darken-1 mb-2">
+                      <span v-if="item.packageName" class="text-primary mr-1 font-weight-bold">
+                            [{{ item.packageName }}]
+                      </span>
+                      {{ item.description }}
+                    </p>
+
+                    <p v-if="item.specifications" class="text-caption text-info mb-2">
+                      <strong>Specs:</strong> {{ item.specifications }}
+                    </p>
+
+                    <v-row dense>
+                      <v-col cols="12">
+                        <v-autocomplete
+                            v-model="item.productId"
+                            :items="products"
+                            item-title="name"
+                            item-value="id"
+                            label="Product"
+                            density="compact"
+                            hide-details="auto"
+                            :rules="[rules.required]"
+                            @update:model-value="() => onProductChange(item, index)"
+                            clearable
+                        >
+                          <template v-slot:item="{ props, item: productItem }">
+                            <v-list-item v-bind="props">
+                              <template v-slot:title>
+                                {{ productItem.raw.name }}
+                              </template>
+                              <template v-slot:subtitle>
+                                SKU: {{ productItem.raw.sku || 'N/A' }}
+                              </template>
+                            </v-list-item>
+                          </template>
+                        </v-autocomplete>
+                      </v-col>
+                      <v-col cols="6">
+                        <v-text-field
+                            v-model.number="item.quantity"
+                            type="number"
+                            label="Quantity"
+                            density="compact"
+                            hide-details="auto"
+                            :rules="[rules.required, rules.positive]"
+                            @update:model-value="calculateLine(item)"
+                        ></v-text-field>
+                      </v-col>
+                      <v-col cols="6">
+                        <v-text-field
+                            v-model.number="item.unitPrice"
+                            type="number"
+                            label="Unit Price"
+                            density="compact"
+                            hide-details="auto"
+                            :rules="[rules.required]"
+                            @update:model-value="calculateLine(item)"
+                        ></v-text-field>
+                      </v-col>
+                      <v-col cols="12" v-if="isSuperAdmin">
+                        <v-text-field v-model.number="item.discount" type="number" label="Discount (%)" density="compact" hide-details="auto" @update:model-value="calculateLine(item)"></v-text-field>
+                      </v-col>
+                      <v-col cols="12" v-else>
+                        <v-text-field :model-value="item.discount || 0" label="Discount (%)" density="compact" hide-details readonly></v-text-field>
+                      </v-col>
+                    </v-row>
+
+                    <div class="text-right mt-3 pt-2 border-top">
+                      <span class="font-weight-bold text-subtitle-1">Subtotal: {{ quotation.currency }} {{ item.lineTotal }}</span>
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </v-list-item>
+            </v-list>
+            <div v-if="quotation.items.length === 0" class="text-center text-grey py-4">
+              No quotation details yet. Please click "Add Product".
             </div>
-          </template>
-
-          <template v-slot:item.quantity="{ item }">
-            <v-text-field v-model.number="item.quantity" type="number" density="compact" hide-details @update:model-value="calculateLine(item)"></v-text-field>
-          </template>
-
-          <template v-slot:item.unitPrice="{ item }">
-            <v-text-field v-model.number="item.unitPrice" type="number" density="compact" hide-details @update:model-value="calculateLine(item)"></v-text-field>
-          </template>
-
-          <template v-slot:item.discount="{ item }">
-            <v-text-field
-                v-if="isSuperAdmin"
-                v-model.number="item.discount"
-                type="number"
-                density="compact"
-                hide-details
-                @update:model-value="calculateLine(item)"
-            ></v-text-field>
-            <span v-else class="text-body-2">{{ item.discount || 0 }}%</span>
-          </template>
-
-          <template v-slot:item.lineTotal="{ item }">
-            {{ item.lineTotal }}
-          </template>
-
-          <template v-slot:item.actions="{ index }">
-            <v-btn icon size="small" color="error" @click="removeItem(index)">
-              <v-icon>mdi-delete</v-icon>
-            </v-btn>
-          </template>
-        </v-data-table>
-
-        <div class="d-md-none">
-          <v-list density="compact" class="pa-0">
-            <v-list-item v-for="(item, index) in quotation.items" :key="index" class="mb-3 pa-0 mobile-item-card">
-              <v-card variant="outlined">
-                <v-card-text>
-                  <div class="d-flex justify-space-between align-center mb-2">
-                    <span class="text-subtitle-2 font-weight-bold">#{{ index + 1 }} {{ item.productName || 'Select Product' }}</span>
-                    <v-btn icon size="x-small" color="error" @click="removeItem(index)">
-                      <v-icon size="small">mdi-delete</v-icon>
-                    </v-btn>
-                  </div>
-
-                  <p v-if="item.packageName || item.description" class="text-caption text-grey-darken-1 mb-2">
-                    <span v-if="item.packageName" class="text-primary mr-1 font-weight-bold">
-                          [{{ item.packageName }}]
-                    </span>
-                    {{ item.description }}
-                  </p>
-
-                  <p v-if="item.specifications" class="text-caption text-info mb-2">
-                    <strong>Specs:</strong> {{ item.specifications }}
-                  </p>
-
-                  <v-row dense>
-                    <v-col cols="12">
-                      <v-autocomplete
-                          v-model="item.productId"
-                          :items="products"
-                          item-title="name"
-                          item-value="id"
-                          label="Product"
-                          density="compact"
-                          hide-details
-                          @update:model-value="() => onProductChange(item, index)"
-                          clearable
-                      >
-                        <template v-slot:item="{ props, item: productItem }">
-                          <v-list-item v-bind="props">
-                            <template v-slot:title>
-                              {{ productItem.raw.name }}
-                            </template>
-                            <template v-slot:subtitle>
-                              SKU: {{ productItem.raw.sku || 'N/A' }}
-                            </template>
-                          </v-list-item>
-                        </template>
-                      </v-autocomplete>
-                    </v-col>
-                    <v-col cols="6">
-                      <v-text-field v-model.number="item.quantity" type="number" label="Quantity" density="compact" hide-details @update:model-value="calculateLine(item)"></v-text-field>
-                    </v-col>
-                    <v-col cols="6">
-                      <v-text-field v-model.number="item.unitPrice" type="number" label="Unit Price" density="compact" hide-details @update:model-value="calculateLine(item)"></v-text-field>
-                    </v-col>
-                    <v-col cols="12" v-if="isSuperAdmin">
-                      <v-text-field v-model.number="item.discount" type="number" label="Discount (%)" density="compact" hide-details @update:model-value="calculateLine(item)"></v-text-field>
-                    </v-col>
-                    <v-col cols="12" v-else>
-                      <v-text-field :model-value="item.discount || 0" label="Discount (%)" density="compact" hide-details readonly></v-text-field>
-                    </v-col>
-                  </v-row>
-
-                  <div class="text-right mt-3 pt-2 border-top">
-                    <span class="font-weight-bold text-subtitle-1">Subtotal: {{ quotation.currency }} {{ item.lineTotal }}</span>
-                  </div>
-                </v-card-text>
-              </v-card>
-            </v-list-item>
-          </v-list>
-          <div v-if="quotation.items.length === 0" class="text-center text-grey py-4">
-            No quotation details yet. Please click "Add Product".
           </div>
-        </div>
 
-      </v-card-text>
-    </v-card>
+        </v-card-text>
+      </v-card>
 
-    <v-card class="mb-2 mb-sm-4">
-      <v-card-text class="pa-2 pa-sm-4 text-right">
-        <h3>Subtotal: {{ quotation.currency }} {{ quotation.subtotal }}</h3>
-        <h3 v-if="quotation.discountAmount > 0">Discount: -{{ quotation.currency }} {{ quotation.discountAmount }}</h3>
-        <h2>Total: {{ quotation.currency }} {{ quotation.total }}</h2>
-      </v-card-text>
-    </v-card>
+      <v-card class="mb-2 mb-sm-4">
+        <v-card-text class="pa-2 pa-sm-4 text-right">
+          <h3>Subtotal: {{ quotation.currency }} {{ quotation.subtotal }}</h3>
+          <h3 v-if="quotation.discountAmount > 0">Discount: -{{ quotation.currency }} {{ quotation.discountAmount }}</h3>
+          <h2>Total: {{ quotation.currency }} {{ quotation.total }}</h2>
+        </v-card-text>
+      </v-card>
 
-    <div class="d-flex flex-column flex-md-row justify-end gap-2">
-      <v-btn color="primary" v-if="quotation.status==='DRAFT'" @click="save">Save</v-btn>
-    </div>
-  </div>
+      <div class="d-flex flex-column flex-md-row justify-end gap-2">
+        <v-btn color="primary" v-if="quotation.status==='DRAFT'" @click="save">Save</v-btn>
+      </div>
+
+    </v-form> </div>
 </template>
 
 <script>
@@ -322,6 +365,12 @@ export default {
   name: 'QuotationForm',
   data() {
     return {
+      valid: false, // 表单校验状态
+      // 验证规则
+      rules: {
+        required: value => !!value || 'Required.',
+        positive: value => (value && value > 0) || 'Must be > 0.'
+      },
       salutations: ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.'],
       isSuperAdmin: false,
       headers: [
@@ -358,6 +407,7 @@ export default {
   },
   methods: {
     async previewPdf() {
+      // PDF Preview Logic (不变)
       const element = document.getElementById('quotation-preview-area')
       if (!element) return alert('Content not found')
 
@@ -522,9 +572,10 @@ export default {
     onCustomerChange(customerId) {
       const c = this.customers.find(x => x.id === customerId)
       if (c) {
-        this.quotation.customerName = c.companyName
+        this.quotation.customerName = c.customerName
         this.quotation.customerFullName = c.customerName
         this.quotation.salutation = c.salutation || 'Mr.'
+        this.quotation.title = c.companyName || 'Unknown'
       }
     },
 
@@ -600,13 +651,17 @@ export default {
     },
 
     async save() {
-      if (!this.quotation.customerId || this.quotation.items.length === 0) {
-        this.$snackbar?.show('Please select a customer and add at least one quotation item.', 'warning')
+      // 1. 验证表单字段
+      const { valid } = await this.$refs.form.validate()
+
+      if (!valid) {
+        this.$snackbar?.show('Please check the fields marked in red.', 'error')
         return
       }
 
-      if (!this.quotation.issueDate || !this.quotation.expiryDate) {
-        this.$snackbar?.show('Please fill in the issue date and expiry date.', 'warning')
+      // 2. 逻辑验证：必须有产品
+      if (this.quotation.items.length === 0) {
+        this.$snackbar?.show('Please add at least one quotation item.', 'warning')
         return
       }
 

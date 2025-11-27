@@ -9,6 +9,8 @@ import QuotationList from '../views/QuotationList.vue'
 import QuotationForm from '../views/QuotationForm.vue'
 import UserList from '../views/UserList.vue'
 import QuotationPreview from "../views/QuotationPreview.vue";
+import BrandList from "../views/BrandList.vue";
+import CategoryList from "../views/CategoryList.vue";
 
 const routes = [
     {
@@ -35,6 +37,16 @@ const routes = [
                 path: 'customers',
                 name: 'CustomerList',
                 component: CustomerList
+            },
+            {
+                path:'/brands',
+                name: 'BrandList',
+                component: BrandList
+            },
+            {
+                path:'/category',
+                name: 'CategoryList',
+                component: CategoryList
             },
             {
                 path: 'products',

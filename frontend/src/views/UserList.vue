@@ -34,7 +34,7 @@
           :items="filteredList"
           :search="search"
           item-key="id"
-          :items-per-page="100"
+          :items-per-page="10"
       >
         <template v-slot:item.role="{ item }">
           <v-chip :color="getRoleColor(item.role)" dark small>

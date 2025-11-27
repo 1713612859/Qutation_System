@@ -43,6 +43,20 @@
             :active="activeMenu === '/customers'"
         ></v-list-item>
         <v-list-item
+            prepend-icon="mdi-watermark"
+            title="Brands"
+            value="brands"
+            :to="'/brands'"
+            :active="activeMenu === '/brands'"
+        ></v-list-item>
+        <v-list-item
+            prepend-icon="mdi-shape"
+            title="Category"
+            value="category"
+            :to="'/category'"
+            :active="activeMenu === '/category'"
+        ></v-list-item>
+        <v-list-item
             v-if="isAdmin"
             prepend-icon="mdi-package-variant"
             title="Products"
@@ -66,6 +80,7 @@
             :to="'/users'"
             :active="activeMenu === '/users'"
         ></v-list-item>
+
       </v-list>
     </v-navigation-drawer>
 

@@ -437,11 +437,43 @@ public class QuotationServiceImpl implements QuotationService {
         quotation.setTotal(finalTotal.setScale(scale, RoundingMode.HALF_UP));
     }
 
+    /**
+     * 删除报价单
+     * 逻辑：
+     * 1. 验证报价单ID有效性
+     * 2. 验证报价单存在
+     * 3. 验证报价单状态（只能删除草稿和已拒绝状态的报价单）
+     * 4. 删除所有关联的明细项
+     * 5. 删除报价单主记录
+     *
+     * @param id 报价单ID
+     * @throws RuntimeException 如果ID无效、报价单不存在或状态不允许删除
+     */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        // 验证ID有效性
+        if(id == null) {
+            throw new RuntimeException("Invalid ID");
+        }
+        // 验证报价单存在
+        Quotation quotation = quotationMapper.selectById(id);
+        if(quotation == null) {
+            throw new RuntimeException("Quotation not found");
+        }
+        // 验证报价单状态：只能删除草稿和已拒绝状态的报价单
+        String status = quotation.getStatus();
+        if("SUBMITTED".equalsIgnoreCase(status)) {
+            throw new RuntimeException("Cannot delete submitted quotations");
+        }
+        if("APPROVED".equalsIgnoreCase(status)) {
+            throw new RuntimeException("Cannot delete approved quotations");
+        }
+        // 删除所有关联的报价明细项
         QueryWrapper<QuotationItem> qw = new QueryWrapper<>();
         qw.eq("quotation_id", id);
         quotationItemMapper.delete(qw);
+        // 删除报价单主记录
         quotationMapper.deleteById(id);
     }
 

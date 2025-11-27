@@ -37,7 +37,7 @@ public class GlobalExceptionHandler {
     public ApiResponse<?> handleRuntimeException(RuntimeException e) {
         e.printStackTrace();
         log.error("系统运行错误：{}", e.getMessage());
-        return ApiResponse.error("系统运行错误：" + e.getMessage());
+        return ApiResponse.error("System error：" + e.getMessage());
     }
 
     /**
@@ -46,6 +46,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ApiResponse<?> handleException(Exception e) {
         e.printStackTrace();
-        return ApiResponse.error("服务器内部错误：" + e.getMessage());
+        return ApiResponse.error("Intern server error：" + e.getMessage());
     }
 }

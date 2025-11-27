@@ -22,6 +22,15 @@ public class Product {
      * 商品名称
      */
     private String name;
+
+    @TableField("brand_id")
+    private Long brandId;
+    /**
+     * 分类ID
+     */
+    @TableField("category_id")
+    private Long categoryId;
+
     /**
      * 商品描述
      */
@@ -49,7 +58,7 @@ public class Product {
     /**
      * 规格
      */
-    private String  specifications;
+    private String specifications;
 
     /**
      * 创建时间

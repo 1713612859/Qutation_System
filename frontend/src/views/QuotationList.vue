@@ -20,41 +20,37 @@
     <v-card>
       <v-card-title class="pb-3">
         <div class="d-flex flex-column flex-md-row w-100 align-center gap-3">
-          <!-- Left: Search Box -->
           <div class="flex-grow-1 w-100" style="max-width: 500px;">
             <v-text-field
-              v-model="search"
-              prepend-inner-icon="mdi-magnify"
-              label="Search by quotation number, title or customer name"
-              placeholder="Enter keywords to search..."
-              variant="outlined"
-              density="comfortable"
-              clearable
-              hide-details
-              class="w-100"
+                v-model="search"
+                prepend-inner-icon="mdi-magnify"
+                label="Search by quotation number, title or customer name"
+                placeholder="Enter keywords to search..."
+                variant="outlined"
+                density="comfortable"
+                clearable
+                hide-details
+                class="w-100"
             ></v-text-field>
           </div>
 
-          <!-- Right: Action Buttons -->
           <div class="d-flex flex-wrap gap-2 align-center">
-            <!-- Items Per Page Selector -->
             <v-select
-              v-model="itemsPerPage"
-              :items="itemsPerPageOptions"
-              label="Per Page"
-              variant="outlined"
-              density="comfortable"
-              hide-details
-              style="min-width: 100px"
+                v-model="itemsPerPage"
+                :items="itemsPerPageOptions"
+                label="Per Page"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                style="min-width: 100px"
             ></v-select>
 
-            <!-- Column Filter Button -->
             <v-menu>
               <template v-slot:activator="{ props }">
                 <v-btn
-                  color="primary"
-                  variant="outlined"
-                  v-bind="props"
+                    color="primary"
+                    variant="outlined"
+                    v-bind="props"
                 >
                   <v-icon left>mdi-filter-variant</v-icon>
                   Column Filter
@@ -63,15 +59,15 @@
               <v-list>
                 <v-list-subheader>Show/Hide Columns</v-list-subheader>
                 <v-list-item
-                  v-for="header in filterableHeaders"
-                  :key="header.key"
-                  @click="toggleColumn(header.key)"
+                    v-for="header in filterableHeaders"
+                    :key="header.key"
+                    @click="toggleColumn(header.key)"
                 >
                   <template v-slot:prepend>
                     <v-checkbox
-                      :model-value="isColumnVisible(header.key)"
-                      density="compact"
-                      hide-details
+                        :model-value="isColumnVisible(header.key)"
+                        density="compact"
+                        hide-details
                     ></v-checkbox>
                   </template>
                   <v-list-item-title>{{ header.title }}</v-list-item-title>
@@ -79,11 +75,10 @@
               </v-list>
             </v-menu>
 
-            <!-- Export Button -->
             <v-btn
-              color="success"
-              variant="elevated"
-              @click="exportData"
+                color="success"
+                variant="elevated"
+                @click="exportData"
             >
               <v-icon left>mdi-download</v-icon>
               Export CSV
@@ -92,17 +87,16 @@
         </div>
       </v-card-title>
 
-      <!-- Desktop: Enhanced Data Table -->
       <v-data-table
-        :headers="visibleHeaders"
-        :items="list"
-        :search="search"
-        :items-per-page="itemsPerPage"
-        :items-per-page-options="itemsPerPageOptions"
-        item-key="id"
-        class="d-none d-md-block"
-        :multi-sort="true"
-        :sort-by="[{ key: 'issueDate', order: 'desc' }]"
+          :headers="visibleHeaders"
+          :items="list"
+          :search="search"
+          :items-per-page="itemsPerPage"
+          :items-per-page-options="itemsPerPageOptions"
+          item-key="id"
+          class="d-none d-md-block"
+          :multi-sort="true"
+          :sort-by="[{ key: 'issueDate', order: 'desc' }]"
       >
         <template v-slot:item.total="{ item }">
           {{ item.currency }} {{ item.total }}
@@ -110,9 +104,9 @@
 
         <template v-slot:item.status="{ item }">
           <v-chip
-            :color="getStatusColor(item.status)"
-            dark
-            small
+              :color="getStatusColor(item.status)"
+              dark
+              small
           >
             {{ getStatusText(item.status) }}
           </v-chip>
@@ -120,58 +114,65 @@
 
         <template v-slot:item.actions="{ item }">
           <v-btn
-            icon
-            size="small"
-            color="primary"
-            @click="$router.push(`/quotations/${item.id}`)"
+              icon
+              size="small"
+              color="primary"
+              @click="$router.push(`/quotations/${item.id}`)"
           >
             <v-icon>mdi-eye</v-icon>
           </v-btn>
           <v-btn
-            v-if="item.status === 'DRAFT'"
-            icon
-            size="small"
-            color="success"
-            @click="submit(item.id)"
+              icon
+              size="small"
+              color="warning"
+              @click="confirmRemove(item.id)"
+          >
+            <v-icon>mdi-delete</v-icon>
+          </v-btn>
+          <v-btn
+              v-if="item.status === 'DRAFT'"
+              icon
+              size="small"
+              color="success"
+              @click="submit(item.id)"
           >
             <v-icon>mdi-send</v-icon>
           </v-btn>
           <v-btn
-            v-if="item.status === 'SUBMITTED' && isAdmin"
-            icon
-            size="small"
-            color="success"
-            @click="approve(item.id)"
+              v-if="item.status === 'SUBMITTED' && isAdmin"
+              icon
+              size="small"
+              color="success"
+              @click="approve(item.id)"
           >
             <v-icon>mdi-check</v-icon>
           </v-btn>
           <v-btn
-            v-if="item.status === 'SUBMITTED'"
-            icon
-            size="small"
-            color="error"
-            @click="reject(item.id)"
+              v-if="item.status === 'SUBMITTED'"
+              icon
+              size="small"
+              color="error"
+              @click="reject(item.id)"
           >
             <v-icon>mdi-close</v-icon>
           </v-btn>
           <v-btn
-            icon
-            size="small"
-            color="info"
-            @click="exportPdf(item.id)"
+              icon
+              size="small"
+              color="info"
+              @click="exportPdf(item.id)"
           >
             <v-icon>mdi-file-pdf-box</v-icon>
           </v-btn>
         </template>
       </v-data-table>
 
-      <!-- Mobile & Tablet: Card List -->
       <div class="d-md-none pa-2">
         <v-card
-          v-for="item in filteredList"
-          :key="item.id"
-          class="mb-3"
-          elevation="2"
+            v-for="item in filteredList"
+            :key="item.id"
+            class="mb-3"
+            elevation="2"
         >
           <v-card-title class="text-subtitle-1 pb-1">
             {{ item.title }}
@@ -183,9 +184,9 @@
               <span>Amount: {{ item.currency }} {{ item.total }}</span>
               <span class="mt-1">
                 <v-chip
-                  :color="getStatusColor(item.status)"
-                  dark
-                  x-small
+                    :color="getStatusColor(item.status)"
+                    dark
+                    x-small
                 >
                   {{ getStatusText(item.status) }}
                 </v-chip>
@@ -195,45 +196,53 @@
           <v-card-actions class="pt-0">
             <v-spacer></v-spacer>
             <v-btn
-              icon
-              size="small"
-              color="primary"
-              @click="$router.push(`/quotations/${item.id}`)"
+                icon
+                size="small"
+                color="primary"
+                @click="$router.push(`/quotations/${item.id}`)"
             >
               <v-icon>mdi-eye</v-icon>
             </v-btn>
             <v-btn
-              v-if="item.status === 'DRAFT'"
-              icon
-              size="small"
-              color="success"
-              @click="submit(item.id)"
+                icon
+                size="small"
+                color="warning"
+                @click="confirmRemove(item.id)"
+            >
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+            <v-btn
+                v-if="item.status === 'DRAFT'"
+                icon
+                size="small"
+                color="success"
+                @click="submit(item.id)"
             >
               <v-icon>mdi-send</v-icon>
             </v-btn>
             <v-btn
-              v-if="item.status === 'SUBMITTED' "
-              icon
-              size="small"
-              color="success"
-              @click="approve(item.id)"
+                v-if="item.status === 'SUBMITTED' && isAdmin"
+                icon
+                size="small"
+                color="success"
+                @click="approve(item.id)"
             >
               <v-icon>mdi-check</v-icon>
             </v-btn>
             <v-btn
-              v-if="item.status === 'SUBMITTED'"
-              icon
-              size="small"
-              color="error"
-              @click="reject(item.id)"
+                v-if="item.status === 'SUBMITTED'"
+                icon
+                size="small"
+                color="error"
+                @click="reject(item.id)"
             >
               <v-icon>mdi-close</v-icon>
             </v-btn>
             <v-btn
-              icon
-              size="small"
-              color="info"
-              @click="exportPdf(item.id)"
+                icon
+                size="small"
+                color="info"
+                @click="exportPdf(item.id)"
             >
               <v-icon>mdi-file-pdf-box</v-icon>
             </v-btn>
@@ -241,6 +250,27 @@
         </v-card>
       </div>
     </v-card>
+
+    <v-dialog v-model="dialogDelete" max-width="500px">
+      <v-card>
+        <v-card-title class="text-h5">Confirm Deletion</v-card-title>
+        <v-card-text>Are you sure you want to delete this quotation? This action cannot be undone.</v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey-darken-1" variant="text" @click="closeDelete">Cancel</v-btn>
+          <v-btn
+              color="error"
+              variant="elevated"
+              @click="performDelete"
+              :loading="isDeleting"
+              :disabled="isDeleting"
+          >
+            Delete
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
   </div>
 </template>
 
@@ -258,6 +288,12 @@ export default {
       itemsPerPageOptions: [5, 10, 25, 50, 100],
       visibleColumns: {},
       userInfo:{},
+
+      // 2. 新增数据属性用于控制删除对话框
+      dialogDelete: false,
+      quotationToDeleteId: null,
+      isDeleting: false,
+
       headers: [
         { title: 'Quotation Number', key: 'quoteNumber', sortable: true },
         { title: 'Title', key: 'title', sortable: true },
@@ -277,9 +313,9 @@ export default {
       const searchLower = this.search.toLowerCase()
       return this.list.filter(item => {
         return (
-          (item.quoteNumber && item.quoteNumber.toLowerCase().includes(searchLower)) ||
-          (item.title && item.title.toLowerCase().includes(searchLower)) ||
-          (item.customerName && item.customerName.toLowerCase().includes(searchLower))
+            (item.quoteNumber && item.quoteNumber.toLowerCase().includes(searchLower)) ||
+            (item.title && item.title.toLowerCase().includes(searchLower)) ||
+            (item.customerName && item.customerName.toLowerCase().includes(searchLower))
         )
       })
     },
@@ -307,6 +343,76 @@ export default {
     })
   },
   methods: {
+    // ... (其他方法保持不变)
+
+    // 新增：打开删除确认对话框
+    confirmRemove(id) {
+      this.quotationToDeleteId = id;
+      this.dialogDelete = true;
+    },
+
+    // 新增：关闭删除确认对话框
+    closeDelete() {
+      this.dialogDelete = false;
+      this.quotationToDeleteId = null;
+      this.isDeleting = false;
+    },
+
+    // 4. 重命名并更新实际删除逻辑
+    async performDelete() {
+      if (!this.quotationToDeleteId) return;
+
+      this.isDeleting = true;
+      const id = this.quotationToDeleteId;
+
+      try{
+        await api.delete(`/quotations/${id}`)
+        this.$snackbar.show('Deleted successfully', 'success')
+        this.load()
+      }catch (error) {
+        this.$snackbar.show(error.response?.data?.msg || 'Deletion failed','error')
+      } finally {
+        this.closeDelete(); // 无论成功失败，都关闭弹窗
+      }
+    },
+
+    async submit(id) {
+      try {
+        await api.post(`/quotations/${id}/submit`)
+        this.$snackbar.show('Submitted successfully')
+        this.load()
+      } catch (error) {
+        this.$snackbar.show(error.response?.data?.msg || 'Submission failed','error')
+      }
+    },
+    // ... (approve, reject, exportPdf 等其他方法保持不变)
+
+    async approve(id) {
+      try {
+        await api.post(`/quotations/${id}/approve`, { comment: 'Approved' })
+        this.$snackbar.show('Approved successfully')
+        this.load()
+      } catch (error) {
+        this.$snackbar.show(error.response?.data?.msg || 'Approval failed','error')
+      }
+    },
+    async reject(id) {
+      try {
+        await api.post(`/quotations/${id}/reject`, { comment: 'Rejected' })
+        this.$snackbar.show('Rejected','error')
+        this.load()
+      } catch (error) {
+        this.$snackbar.show(error.response?.data?.msg || 'Operation failed','error')
+      }
+    },
+    exportPdf(id) {
+      this.$router.push({
+        path: `/quotations/${id}/preview`,
+        query: {
+          quoteId: id
+        }
+      })
+    },
     // 加载用户信息
     async loadUserInfo() {
       try {
@@ -364,41 +470,6 @@ export default {
       }
       exportToCSV(this.visibleHeaders, this.list, formatter, 'Quotation List')
     },
-    async submit(id) {
-      try {
-        await api.post(`/quotations/${id}/submit`)
-        this.$snackbar.show('Submitted successfully')
-        this.load()
-      } catch (error) {
-        this.$snackbar.show(error.response?.data?.msg || 'Submission failed','error')
-      }
-    },
-    async approve(id) {
-      try {
-        await api.post(`/quotations/${id}/approve`, { comment: 'Approved' })
-        this.$snackbar.show('Approved successfully')
-        this.load()
-      } catch (error) {
-        this.$snackbar.show(error.response?.data?.msg || 'Approval failed','error')
-      }
-    },
-    async reject(id) {
-      try {
-        await api.post(`/quotations/${id}/reject`, { comment: 'Rejected' })
-        this.$snackbar.show('Rejected','error')
-        this.load()
-      } catch (error) {
-        this.$snackbar.show(error.response?.data?.msg || 'Operation failed','error')
-      }
-    },
-    exportPdf(id) {
-      this.$router.push({
-        path: `/quotations/${id}/preview`,
-        query: {
-          quoteId: id // Pass ID as query parameter
-        }
-      })
-    }
   }
 }
 </script>

@@ -46,7 +46,7 @@
                 >
                   Sign
                 </v-btn>
-                <v-btn
+<!--                <v-btn
                     color="secondary"
                     variant="text"
                     block
@@ -54,7 +54,7 @@
                     @click="$router.push('/register')"
                 >
                   Register
-                </v-btn>
+                </v-btn>-->
               </v-card-actions>
             </v-card>
           </v-col>
