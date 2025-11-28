@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.example.quotation.entity.Category;
 import org.apache.ibatis.annotations.Mapper;
 
+/**
+ * 分类映射器接口
+ */
 @Mapper
 public interface CategoryMapper extends BaseMapper<Category> {
 }
