@@ -228,7 +228,7 @@ export default {
         { title: 'Category', key: 'categoryName', sortable: false },
         { title: 'Brand', key: 'brandName', sortable: false },
         { title: 'Unit', key: 'unit', sortable: true },
-        { title: 'Default Price', key: 'defaultPrice', sortable: true },
+        { title: 'Non-VAT Price', key: 'defaultPrice', sortable: true },
         { title: 'Tax Rate (%)', key: 'taxRate', sortable: true },
         { title: 'Status', key: 'enabled', sortable: true },
         { title: 'Actions', key: 'actions', sortable: false, align: 'end' },

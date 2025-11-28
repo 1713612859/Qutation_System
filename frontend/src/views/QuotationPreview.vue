@@ -1,19 +1,15 @@
 <template>
-  <div id="quotation-template" class="quotation-container minimalist-style">
-    <!-- 1. 头部和公司信息 (Logo on Left, Info on Right) -->
+  <div id="quotation-template" ref="quotationContent" class="quotation-container minimalist-style">
     <div class="logo">
-      <!-- NOTE: Local image paths are not supported. Using a placeholder for visualization. -->
       <img src="../static/logo1.png" class="logo" alt="ZUNO GROUP INC. Logo">
     </div>
     <div class="header">
       <div class="company-info">
-        <!-- 使用 p 标签代替 h3 标签 -->
         <h2></h2>
         <p class="company-address">Don Benito, F.B Harrison, Don B. Hernandez, Pasay City, 1300 Metro Manila</p>
         <p class="company-contact">Email: sales@zuno.ph | Tel: +63 0917-446-9999</p>
       </div>
     </div>
-
 
     <h1 class="title">QUOTATION</h1>
 
@@ -22,11 +18,11 @@
     </div>
 
     <div v-else>
-      <!-- 2. 客户和报价元信息 (简约布局) -->
       <div class="quote-meta-info">
         <div class="meta-block">
           <p class="meta-heading">BILLED TO:</p>
-          <p class="meta-content customer-name">Customer Name: {{ customer.customerName || '' }}</p>
+          <p class="meta-content customer-name">Company Name: {{ customer.companyName || '' }}</p>
+          <p class="meta-content ">Customer Name: {{ customer.customerName || '' }}</p>
           <p class="meta-address">Contact Name: {{ customer.contactName || '' }}</p>
           <p class="meta-attention">Address: {{ customer.address || '' }}</p>
         </div>
@@ -34,11 +30,11 @@
           <p><span class="label">Quotation No:</span> <span class="value">{{ quotation.quoteNumber }}</span></p>
           <p><span class="label">Issue Date:</span> <span class="value">{{ quotation.issueDate }}</span></p>
           <p><span class="label">Valid Until:</span> <span class="value">{{ quotation.expiryDate }}</span></p>
-          <p class="meta-contact-line"><span class="label">Phone:</span> <span
-              class="value">{{ quotation.customerPhone || 'N/A' }}</span></p>
+<!--          <p class="meta-contact-line"><span class="label">Phone:</span> <span
+              class="value">{{ quotation.customerPhone || 'N/A' }}</span></p>-->
         </div>
       </div>
-      <!-- 3. 项目明细表格 -->
+
       <table class="quote-table">
         <thead>
         <tr>
@@ -63,12 +59,11 @@
           </td>
           <td class="text-center">{{ item.quantity }}</td>
           <td class="text-right">{{ format(item.unitPrice) }}</td>
-          <td class="line-total text-right">{{ format(item.lineTotal) }}</td>
+          <td class="line-total text-right">{{ format(item.quantity * item.unitPrice )}}</td>
         </tr>
         </tbody>
       </table>
 
-      <!-- 4. 汇总和总计 -->
       <div class="totals-wrapper">
         <div class="totals">
           <div class="total-row">
@@ -90,33 +85,85 @@
         </div>
       </div>
 
-      <!-- 5. 银行信息和条款 (恢复自原始 PDF) -->
       <div class="terms-and-conditions">
         <h3 class="section-title">Terms and Conditions:</h3>
 
         <div class="bank-details-section">
           <p><strong>For payment, please remit to:</strong></p>
-          <div class="bank-details">
-            <p>   <span>#1</span> Name of Payee: <span></span></p>
-            <p>Name of Bank: <span></span></p>
-            <p>Bank Account No: <span></span></p>
+          <div
+              v-for="(bank, index) in quotation.bankAccounts"
+              :key="index"
+              class="bank-details"
+          >
+            <div class="form-row">
+              <span class="row-label"><span>#{{ index + 1 }}</span> Name of Payee:</span>
+              <span v-if="isExporting" class="static-value">{{ bank.payee }}</span>
+              <input v-else v-model="bank.payee" class="bank-input" placeholder="Enter Payee" />
+            </div>
 
-            <p>   <span>#2</span> Name of Payee: <span></span></p>
-            <p>Name of Bank: <span></span></p>
-            <p>Bank Account No: <span></span></p>
+            <div class="form-row">
+              <span class="row-label">Name of Bank:</span>
+              <span v-if="isExporting" class="static-value">{{ bank.bankName }}</span>
+              <input v-else v-model="bank.bankName" class="bank-input" placeholder="Enter Bank Name" />
+            </div>
 
-            <p>      <span>#3</span> Name of Payee: <span></span></p>
-            <p>Name of Bank: <span></span></p>
-            <p>Bank Account No: <span></span></p>
+            <div class="form-row">
+              <span class="row-label">Bank Account No:</span>
+              <span v-if="isExporting" class="static-value">{{ bank.accountNumber }}</span>
+              <input v-else v-model="bank.accountNumber" class="bank-input" placeholder="Enter Account No" />
+            </div>
+
+            <div class="bank-actions" v-if="!isExporting && quotation.bankAccounts.length > 1">
+              <button @click="removeBank(index)" class="remove-btn">
+                Remove
+              </button>
+            </div>
+          </div>
+
+          <div class="add-bank" v-if="!isExporting">
+            <button @click="addBank" class="add-btn">
+              + Add Another Bank
+            </button>
           </div>
         </div>
 
         <div class="core-terms">
           <ol class="main-list">
             <li>Price are inclusive of VAT</li>
-            <li>Payment Terms: <span></span></li>
-            <li>Validity: <span></span></li>
-            <li>Availability: <span></span></li>
+
+            <li class="list-item-flex">
+              <span class="row-label">Payment Terms:</span>
+              <span v-if="isExporting" class="static-value term-static">{{ quotation.paymentTerms }}</span>
+              <input
+                  v-else
+                  type="text"
+                  v-model="quotation.paymentTerms"
+                  class="editable-term-input"
+                  placeholder="Enter Payment Terms"
+              >
+            </li>
+            <li class="list-item-flex">
+              <span class="row-label">Validity:</span>
+              <span v-if="isExporting" class="static-value term-static">{{ quotation.validity }}</span>
+              <input
+                  v-else
+                  type="text"
+                  v-model="quotation.validity"
+                  class="editable-term-input"
+                  placeholder="Enter Validity"
+              >
+            </li>
+            <li class="list-item-flex">
+              <span class="row-label">Availability:</span>
+              <span v-if="isExporting" class="static-value term-static">{{ quotation.availability }}</span>
+              <input
+                  v-else
+                  type="text"
+                  v-model="quotation.availability"
+                  class="editable-term-input"
+                  placeholder="Enter Availability"
+              >
+            </li>
           </ol>
 
           <h4 class="sub-section-title">a. Hardware Terms</h4>
@@ -130,8 +177,7 @@
                 <li>Unauthorized modification, disassembly, or repair.</li>
               </ul>
             </li>
-            <li>After the warranty period, maintenance or replacement shall be subject to additional service charges.
-            </li>
+            <li>After the warranty period, maintenance or replacement shall be subject to additional service charges.</li>
             <li>For third-party brand equipment, the original manufacturer's warranty terms shall prevail.</li>
             <li>If the Client purchases hardware only, ZUNO shall be responsible solely for the delivery of the
               products. On-site installation, configuration, or setup services are not included and shall be charged
@@ -176,20 +222,22 @@
         </div>
       </div>
 
-      <!-- 6. 签名区域 (双重签名) -->
-      <div class="signature-section">
-        <div class="signature-box left-box">
-          <p class="sincerely">Sincerely,</p>
-          <div class="signature-line"></div>
-          <p class="company-signature-name">ZUNO GROUP INC. Representative</p>
-          <p class="representative-title">Sales Department</p>
+      <div class="signature-section-final">
+        <div class="signature-box-final sales-side-final">
+          <p class="sincerely-final">Sincerely,</p>
+          <div class="signature-content-final left-align-content">
+            <div class="signature-line-final"></div>
+            <p class="company-signature-name-final">ZUNO GROUP INC. REPRESENTATIVE</p>
+            <p class="representative-title-final">Sales Department</p>
+          </div>
         </div>
 
-        <div class="signature-box right-box">
-          <p class="acknowledged-header">ACKNOWLEDGED AND AGREED BY:</p>
-          <div class="signature-line"></div>
-          <p class="customer-name-line"></p>
-          <p class="representative-title">Authorized Representative</p>
+        <div class="signature-box-final client-side-final">
+          <h3 class="acknowledged-header-final">ACKNOWLEDGED AND AGREED BY:</h3>
+          <div class="signature-content-final right-align-content">
+            <div class="signature-line-final"></div>
+            <p class="representative-title-final">Authorized Representative</p>
+          </div>
         </div>
       </div>
     </div>
@@ -198,10 +246,9 @@
       <p class="thanks">Thank you for your business!</p>
     </div>
 
-    <!-- 7. 导出按钮 -->
-    <div class="actions">
+    <div class="actions" v-if="!isExporting">
       <v-btn color="primary" @click="exportPdf"
-             :disabled="!quotation.quoteNumber || ['加载失败', '无ID'].includes(quotation.quoteNumber)">📄 Export PDF
+             :disabled="!quotation.quoteNumber || ['Load failed', 'No ID'].includes(quotation.quoteNumber)">📄 Export PDF
       </v-btn>
     </div>
   </div>
@@ -211,12 +258,16 @@
 import jsPDF from 'jspdf'
 import api from "../api";
 import html2canvas from 'html2canvas'
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useRoute } from "vue-router";
 
 const route = useRoute();
 const quoteId = route.query.quoteId;
 const customer = ref({})
+
+const isExporting = ref(false);
+const quotationContent = ref(null);
+
 const quotation = ref({
   quoteNumber: null,
   issueDate: null,
@@ -229,26 +280,41 @@ const quotation = ref({
   taxAmount: 0,
   total: 0,
   notes: null,
-  discountAmount: 0
+  discountAmount: 0,
+  paymentTerms: 'Either 100% Full Payment before delivery or 50% DP 50% before delivery',
+  validity: '1, 2 or 3 months',
+  availability: 'Either On-stock or Order Basis' ,
+  bankAccounts: [
+    {
+      payee: '',
+      bankName: '',
+      accountNumber: ''
+    }
+  ],
 });
 
 if (quoteId) {
   try {
     const { data: res } = await api.get(`/quotations/${quoteId}`);
-
     if (res && res.data) {
       const apiData = res.data;
       quotation.value = {
         ...quotation.value,
         ...apiData.quotation,
         items: apiData.items || apiData.quotation?.items || [],
+        paymentTerms: apiData.quotation.paymentTerms || quotation.value.paymentTerms,
+        validity: apiData.quotation.validity || quotation.value.validity,
+        availability: apiData.quotation.availability || quotation.value.availability,
       };
+
+      if (!quotation.value.bankAccounts || quotation.value.bankAccounts.length === 0) {
+        quotation.value.bankAccounts = [{ payee: '', bankName: '', accountNumber: '' }];
+      }
 
       quotation.value.items.forEach(item => {
         item.lineTotal = parseFloat(item.lineTotal) || 0;
         item.unitPrice = parseFloat(item.unitPrice) || 0;
         item.packageName = item.packageName || null;
-        item.isFromPackage = item.isFromPackage || (item.packageName ? true : false);
       });
 
       quotation.value.subtotal = parseFloat(quotation.value.subtotal) || 0;
@@ -259,117 +325,130 @@ if (quoteId) {
       api.get(`/customers/${quotation.value.customerId}`).then(response => {
         customer.value = response.data.data;
       });
-    } else {
-      console.error("API 返回数据结构不正确:", res);
     }
   } catch (e) {
-    console.error("加载报价单数据失败:", e);
+    console.error(e);
     quotation.value.quoteNumber = '加载失败';
-    alert(`加载报价单 ID ${quoteId} 失败！请查看控制台。`);
   }
 } else {
-  console.warn("未在查询参数中找到 quoteId！");
   quotation.value.quoteNumber = '无ID';
 }
+
+const addBank = () => {
+  quotation.value.bankAccounts.push({ payee: '', bankName: '', accountNumber: '' });
+};
+
+const removeBank = (index) => {
+  quotation.value.bankAccounts.splice(index, 1);
+};
 
 const format = val => {
   if (val === null || val === undefined || isNaN(val)) return '0.00';
   return Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// --- PDF 导出逻辑（优化体积 + 控制清晰度） ---
 const exportPdf = async () => {
-  const element = document.getElementById('quotation-template');
-  const actionsElement = element?.querySelector('.actions');
-
-  if (!element || !quotation.value.quoteNumber || ['加载失败', '无ID'].includes(quotation.value.quoteNumber)) {
-    alert('数据未加载完成或加载失败，无法导出 PDF。');
-    return;
+  if (!quotation.value.quoteNumber) return;
+  const res = await api.post('/quotations', quotation.value)
+  if(res && !res.code === 200) {
+    console.log(res.data , 'export failed ' ); // 执行 保存配置逻辑
+    return ;
   }
-
-  // 隐藏导出按钮
-  let originalDisplay = '';
-  if (actionsElement) {
-    originalDisplay = actionsElement.style.display;
-    actionsElement.style.display = 'none';
-  }
-
   try {
-    // 截图（压缩清晰度）
+    isExporting.value = true;
+    await nextTick();
+
+    window.scrollTo(0, 0);
+    const element = document.getElementById('quotation-template');
+
     const canvas = await html2canvas(element, {
-      scale: 1.0,        // ↓ 清晰度适中（建议 0.9～1.25 之间）
+      scale: 2,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
-      logging: false
+      windowWidth: element.scrollWidth,
+      windowHeight: element.scrollHeight,
+      scrollY: 0,
+      onclone: (clonedDoc) => {
+        // 确保 Input 变身后的 Span 具有良好的行高，避免截断
+        const staticValues = clonedDoc.querySelectorAll('.static-value');
+        staticValues.forEach(el => {
+          el.style.lineHeight = '1.6';
+          el.style.paddingBottom = '3px';
+          // 关键：强制 baseline 对齐
+          el.style.verticalAlign = 'baseline';
+        });
+      }
     });
 
-    // 恢复导出按钮
-    if (actionsElement) actionsElement.style.display = originalDisplay;
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    const pdf = new jsPDF("p", "mm", "a4");
 
-    // 压缩为 JPEG（非 PNG）
-    const imgData = canvas.toDataURL('image/jpeg', 0.85);
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgWidth = pdf.internal.pageSize.getWidth();
+    const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    let heightLeft = imgHeight;
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+    let remainingHeight = imgHeight;
     let position = 0;
 
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+    remainingHeight -= pageHeight;
 
-    while (heightLeft >= 0) {
-      position = heightLeft - imgHeight;
+    while (remainingHeight > 0) {
+      position -= pageHeight;
       pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+      remainingHeight -= pageHeight;
     }
 
     pdf.save(`Quotation_${quotation.value.quoteNumber}.pdf`);
+
   } catch (error) {
-    console.error("PDF 导出失败:", error);
-    if (actionsElement) actionsElement.style.display = originalDisplay;
-    alert("生成 PDF 失败，请检查控制台错误。");
+    console.error(error);
+    alert("生成 PDF 失败");
+  } finally {
+    isExporting.value = false;
   }
 };
 </script>
-
-
 <style scoped>
 /* 定义品牌色变量 */
 :root {
-  --brand-color: #004d99; /* 深蓝色，专业科技感 */
-  --accent-color: #007bff; /* 浅蓝 */
+  --brand-color: #004d99;
+  --accent-color: #007bff;
   --light-gray: #f9f9f9;
   --medium-gray: #eee;
   --text-dark: #2c3e50;
   --text-light: #6c757d;
 }
 
-/* 容器和基础字体 */
 .quotation-container {
-  max-width: 800px;
+  width: 794px;
+  min-height: 1123px;
   margin: auto;
   background: #fff;
   padding: 30px;
   font-family: 'Inter', 'Arial', sans-serif;
   color: var(--text-dark);
+  box-sizing: border-box;
+  overflow: visible;
+  /* 确保全局容器在最上层 */
+  position: relative;
+  z-index: 10;
 }
 
-/* --- 1. 头部信息 --- */
+/* Header & Logo */
 .header {
   justify-content: space-between;
   align-items: center;
-  border-bottom: 5px solid var(--brand-color); /* 品牌色粗线强调 */
+  border-bottom: 5px solid var(--brand-color);
   padding-bottom: 15px;
   margin-bottom: 30px;
   text-align: center;
   align-content: center;
-
 }
-
 .logo {
   width: 100%;
   justify-content: center;
@@ -377,20 +456,17 @@ const exportPdf = async () => {
   max-height: 100px;
   object-fit: contain;
 }
-
 .company-info {
   align-content: center;
   text-align: center;
   line-height: 1.3;
 }
-
 .company-info h2 {
   margin-bottom: 2px;
   font-size: 1.7em;
   color: #000;
   text-transform: uppercase;
 }
-
 .company-info p {
   margin: 0;
   font-size: 0.8em;
@@ -399,24 +475,14 @@ const exportPdf = async () => {
   align-content: center;
   text-align: center;
 }
-
 .company-address {
   font-style: italic;
   font-size: 0.75em !important;
-  align-items: center;
-  align-content: center;
-  text-align: center;
 }
-
 .company-contact {
   margin-top: 5px !important;
   font-weight: bold;
-  align-items: center;
-  align-content: center;
-  text-align: center;
 }
-
-/* --- 标题 --- */
 .title {
   text-align: left;
   margin-top: 0;
@@ -427,14 +493,13 @@ const exportPdf = async () => {
   letter-spacing: 2px;
 }
 
-/* --- 2. 报价基本信息 --- */
+/* Meta Info */
 .quote-meta-info {
   display: flex;
   justify-content: space-between;
   margin-bottom: 30px;
   font-size: 0.9em;
 }
-
 .meta-block {
   padding: 10px 15px;
   border-left: 5px solid var(--brand-color);
@@ -442,14 +507,12 @@ const exportPdf = async () => {
   flex-basis: 48%;
   border-radius: 4px;
 }
-
 .meta-block.right-aligned {
   text-align: right;
   border-left: none;
   border-right: 5px solid var(--brand-color);
-  background-color: #f0f7ff; /* 略微不同，区分收件人 */
+  background-color: #f0f7ff;
 }
-
 .meta-heading {
   font-size: 0.9em;
   color: var(--text-light);
@@ -457,7 +520,6 @@ const exportPdf = async () => {
   font-weight: bold;
   text-transform: uppercase;
 }
-
 .customer-name {
   font-size: 1.2em;
   color: #000;
@@ -465,36 +527,31 @@ const exportPdf = async () => {
   margin-top: 5px;
   margin-bottom: 5px;
 }
-
 .meta-address, .meta-attention {
   font-size: 0.9em;
   color: var(--text-dark);
 }
-
 .meta-block p {
   margin: 3px 0;
 }
-
 .meta-block .label {
   font-weight: 500;
   color: var(--text-light);
   display: inline-block;
   width: 100px;
 }
-
 .meta-block .value {
   font-weight: bold;
   color: var(--text-dark);
 }
 
-/* --- 3. 表格样式 --- */
+/* Table */
 .quote-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
   table-layout: fixed;
 }
-
 .quote-table th {
   background-color: var(--brand-color);
   color: #fff;
@@ -504,7 +561,6 @@ const exportPdf = async () => {
   font-size: 0.85em;
   border-bottom: 1px solid #000;
 }
-
 .quote-table td {
   border: none;
   border-bottom: 1px solid #eee;
@@ -512,18 +568,12 @@ const exportPdf = async () => {
   word-wrap: break-word;
   vertical-align: top;
   font-size: 0.85em;
+  line-height: 1.4;
 }
-
-.quote-table tr:last-child td {
-  border-bottom: 2px solid var(--brand-color);
-}
-
-/* 描述列 */
 .description-cell {
   text-align: left !important;
   padding-left: 10px !important;
 }
-
 .package-tag {
   display: inline-block;
   font-size: 0.7em;
@@ -536,60 +586,51 @@ const exportPdf = async () => {
   margin-bottom: 2px;
   text-transform: uppercase;
 }
-
 .product-name {
   font-weight: bold;
   color: #000;
   line-height: 1.3;
 }
-
 .item-description {
   font-size: 0.75em;
   color: var(--text-light);
   margin-top: 3px;
   font-style: italic;
 }
-
 .line-total {
   font-weight: bold;
   color: #222;
 }
 
-/* --- 4. 汇总样式 --- */
+/* Totals */
 .totals-wrapper {
   display: flex;
   justify-content: flex-end;
   margin-top: 20px;
 }
-
 .totals {
   width: 350px;
   font-size: 1em;
   border: 1px solid var(--medium-gray);
   border-radius: 4px;
 }
-
 .total-row {
   display: flex;
   justify-content: space-between;
   padding: 10px 15px;
   border-bottom: 1px dashed #eee;
 }
-
 .total-row:last-child {
   border-bottom: none;
 }
-
 .total-row .label {
   font-weight: 500;
   color: var(--text-dark);
 }
-
 .total-row .value {
   font-weight: bold;
   color: #000;
 }
-
 .grand-total-row {
   background-color: var(--brand-color);
   color: #000000;
@@ -597,21 +638,18 @@ const exportPdf = async () => {
   padding: 15px;
   border-radius: 0 0 4px 4px;
 }
-
 .grand-total-row .label, .grand-total-row .value {
   color: #000000;
 }
-
 .tax-row {
   font-style: italic;
   color: #666;
 }
-
 .discount-row .value {
   color: #dc3545;
 }
 
-/* --- 5. 银行信息和条款 (恢复) --- */
+/* Terms & Conditions */
 .terms-and-conditions {
   margin-top: 50px;
   padding-top: 20px;
@@ -619,7 +657,6 @@ const exportPdf = async () => {
   font-size: 0.85em;
   line-height: 1.6;
 }
-
 .section-title {
   font-size: 1.3em;
   color: var(--brand-color);
@@ -628,39 +665,114 @@ const exportPdf = async () => {
   border-bottom: 1px solid #ddd;
 }
 
+/* --- 银行信息容器修复：隔离与裁剪 --- */
 .bank-details-section {
   background-color: var(--light-gray);
   padding: 15px;
   border-radius: 5px;
   margin-bottom: 20px;
+  overflow: hidden;
 }
-
 .bank-details-section strong {
   font-size: 1.1em;
   color: var(--text-dark);
 }
 
-.bank-details p {
-  margin: 3px 0;
+/* 动态银行信息块修复：强制硬件加速和调整间距 */
+.bank-details {
+  position: relative;
+  z-index: 2;
+  /* 响应用户要求，减少块间距 */
+  margin-bottom: 5px;
+  /* 终极修复：强制硬件加速，解决渲染瑕疵 */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* --- Flex Row 布局实现对齐和换行 --- */
+.form-row {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 5px;
   padding-left: 20px;
   color: #333;
 }
 
-.bank-details span {
-  font-weight: bold;
-  color: var(--brand-color);
+.list-item-flex {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 5px;
 }
 
+/* 关键修复 1: 设定 Label 固定宽度，实现整齐对齐 */
+.row-label {
+  white-space: nowrap;
+  width: 150px;
+  min-width: 150px;
+  margin-right: 10px;
+  text-align: right;
+}
+
+.row-label span {
+  font-weight: bold;
+  color: var(--brand-color);
+  margin-right: 5px;
+}
+
+/* Input & Static Value */
+.bank-input,
+.editable-term-input {
+  flex-grow: 1;
+  font-weight: bold;
+  color: var(--brand-color);
+  border: none;
+  border-bottom: 1px dashed #999;
+  padding: 0 5px;
+  background-color: transparent;
+  font-size: 1em;
+  line-height: 1.5;
+  outline: none;
+  word-break: break-word;
+}
+
+.bank-input {
+  min-width: 200px;
+}
+.editable-term-input {
+  width: 100%;
+}
+
+/* 导出时的静态文本样式 (Span) - 修复截断 + 保持对齐 */
+.static-value {
+  flex-grow: 1;
+  display: inline-block;
+  font-weight: bold;
+  color: var(--brand-color);
+  padding: 0 5px;
+  border-bottom: 1px dashed #999;
+  min-width: 200px;
+
+  /* 解决截断 */
+  line-height: 1.5;
+  padding-bottom: 2px;
+  /* 允许在长单词/数字处换行，防止溢出或分割符问题 */
+  word-break: break-word;
+}
+
+.term-static {
+  min-width: 50px;
+}
+
+/* List Styles */
 .core-terms ol {
   margin-left: 0;
   padding-left: 20px;
 }
-
 .main-list li {
   font-weight: bold;
   color: var(--text-dark);
+  margin-bottom: 5px;
 }
-
 .sub-section-title {
   font-size: 1.1em;
   color: var(--text-dark);
@@ -668,11 +780,9 @@ const exportPdf = async () => {
   margin-bottom: 8px;
   font-weight: bold;
 }
-
 .term-paragraph {
   margin-bottom: 15px;
 }
-
 .sub-ul {
   margin: 5px 0 10px 0;
   list-style-type: disc;
@@ -680,103 +790,111 @@ const exportPdf = async () => {
   font-style: italic;
 }
 
-
-/* --- 6. 签名区域 --- */
-/* --- 6. 签名区域 --- */
-.signature-section {
+/* Signatures */
+.signature-section-final {
   display: flex;
   justify-content: space-between;
-  margin-top: 60px;
-  padding-top: 20px;
-  border-top: 1px dashed #ccc;
+  margin-top: 80px;
+  width: 100%;
 }
-
-.signature-box {
+.signature-box-final {
   flex-basis: 48%;
-  padding-top: 15px;
-  text-align: center; /* 统一为居中，让两边对齐更统一 */
+  position: relative;
 }
-
-/* 左侧签名区整体左对齐 */
-.left-box {
+.sales-side-final {
   text-align: left;
 }
-
-/* Sales Department 左对齐 */
-.left-box .representative-title {
-  text-align: left;
-}
-
-
-.sincerely {
+.sincerely-final {
   font-weight: 500;
   font-size: 1.1em;
-  margin-bottom: 40px;
+  margin: 0;
+  margin-bottom: 5px;
+  display: block;
 }
-
-.company-signature-name,
-.customer-name-line {
-  margin: 0 auto;
-  font-size: 1.1em;
-  font-weight: bold;
-  color: #000;
-  width: 80%;
-  padding-bottom: 3px;
-  text-align: center;
-  text-transform: uppercase;
+.left-align-content {
+  text-align: left;
+  margin-top: 50px;
 }
-
-.representative-title {
-  font-size: 0.9em;
-  color: var(--text-light);
-  margin-top: 5px;
-  text-align: center; /* 统一对齐 */
+.client-side-final {
+  text-align: right;
 }
-
-.right-box {
-  text-align: center;
-}
-
-.acknowledged-header {
+.acknowledged-header-final {
   font-weight: bold;
   color: var(--text-dark);
-  margin: 0 auto 20px auto;
+  font-size: 1.1em;
+  margin-bottom: 5px;
+  margin-top: 0;
+  text-align: right;
+}
+.right-align-content {
+  text-align: right;
+  margin-top: 50px;
+}
+.signature-line-final {
   border-bottom: 1px solid #000;
-  width: 80%;
-  padding-bottom: 5px;
+  width: 350px;
+  height: 1px;
+  margin-bottom: 5px;
+}
+.left-align-content .signature-line-final {
+  margin-left: 0;
+  margin-right: auto;
+}
+.right-align-content .signature-line-final {
+  margin-left: auto;
+  margin-right: 0;
+}
+.company-signature-name-final {
+  font-size: 1em;
+  font-weight: bold;
+  color: #000;
+  margin: 3px 0;
+  text-transform: uppercase;
+}
+.representative-title-final {
+  font-size: 0.9em;
+  color: var(--text-light);
+  margin-top: 3px;
 }
 
-.signature-line {
-  border-bottom: 2px solid #000;
-  width: 80%;
-  margin: 0 auto 5px auto;
-}
-
-.customer-name-line {
-  margin-top: 5px;
-}
-
-
-/* 底部感谢 */
+/* Footer & Actions */
 .footer-note {
   text-align: center;
-  margin-top: 30px;
+  margin-top: 80px;
 }
-
-.footer-note .thanks {
-  font-weight: bold;
-  font-size: 1.3em;
-  color: var(--brand-color);
-}
-
-/* 导出按钮 */
 .actions {
   text-align: center;
   margin-top: 30px;
   padding: 15px;
   border-top: 1px dashed #ccc;
 }
-
+.bank-actions {
+  text-align: right;
+  margin-top: 6px;
+  padding-right: 20px;
+}
+.remove-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.add-bank {
+  text-align: right;
+  margin-top: 10px;
+}
+.add-btn {
+  background: var(--brand-color, #003366);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 3px;
+}
 .loading-state {
   text-align: center;
   padding: 50px;
