@@ -28,7 +28,7 @@ import java.util.List;
  * 1. 报价单的创建、更新、删除
  * 2. 从套餐创建报价单
  * 3. 报价单状态流转（提交、审批、拒绝）
- * 4. 报价单金额自动计算（含税、含折扣）
+ * 4. 报价单金额自动计算（价外税模式）
  * 5. 报价明细项的金额计算
  *
  * @author System
@@ -55,6 +55,10 @@ public class QuotationServiceImpl implements QuotationService {
     @Resource
     private SystemSettingsService systemSettingsService;
 
+    // 定义精度
+    private static final int SCALE = 2;
+    private static final int CALCULATE_SCALE = 4; // 计算过程中的精度
+
     /**
      * 保存报价单（新增或更新）
      * 逻辑：
@@ -68,8 +72,6 @@ public class QuotationServiceImpl implements QuotationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Quotation save(Quotation q) {
-
-
         if(q.getId() == null) {
             // 新增报价单：生成报价单号、设置初始状态为草稿
             if(!StringUtils.hasText(q.getQuoteNumber())) {
@@ -125,7 +127,7 @@ public class QuotationServiceImpl implements QuotationService {
      * 2. 创建报价单基本信息
      * 3. 从套餐中加载产品明细，转换为报价明细
      * 4. 价格优先级：套餐项价格 > 产品默认价格
-     * 5. 税率优先级：套餐项税率 > 产品税率 > 系统默认税率
+     * 5. 税率优先级：套餐项税率 > 产品税率 > 系统默认税率 (均假设为小数形式，如 0.12)
      * 6. 自动计算报价单总价
      *
      * @param packageId  套餐ID
@@ -191,8 +193,9 @@ public class QuotationServiceImpl implements QuotationService {
                 // 价格优先级：套餐项价格 > 产品默认价格
                 item.setUnitPrice(pkgItem.getUnitPrice() != null ? pkgItem.getUnitPrice() : product.getDefaultPrice());
                 item.setDiscount(pkgItem.getDiscount());
-                // 税率优先级：套餐项税率 > 产品税率 > 系统默认税率
+                // 税率优先级：套餐项税率 > 产品税率 > 系统默认税率 (假设均为小数，如 0.12)
                 item.setTaxRate(pkgItem.getTaxRate() != null ? pkgItem.getTaxRate() : (product.getTaxRate() != null ? product.getTaxRate() : getDefaultTaxRate()));
+
                 // 计算每行的金额
                 calculateLineTotal(item);
                 quotationItems.add(item);
@@ -383,10 +386,10 @@ public class QuotationServiceImpl implements QuotationService {
     /**
      * 计算报价单总价
      * 计算逻辑：
-     * 1. 汇总所有明细项的行小计（已含行级折扣）得到报价单小计
+     * 1. 汇总所有明细项的行小计（已含行级折扣，且不含税）得到报价单小计
      * 2. 汇总所有明细项的税额得到报价单总税额
      * 3. 应用报价单级别的折扣（如果有）
-     * 4. 总价 = 小计（扣除报价单折扣后）+ 税额
+     * 4. 总价 = 小计（扣除报价单折扣后）+ 总税额
      *
      * @param quotation 报价单对象（需要先保存明细项）
      */
@@ -394,33 +397,32 @@ public class QuotationServiceImpl implements QuotationService {
     public void calculateTotal(Quotation quotation) {
         List<QuotationItem> items = listItems(quotation.getId());
 
-        // 【已修复】如果明细项列表为空，则将金额清零并返回。
+        // 如果明细项列表为空，则将金额清零并返回。
         if(CollectionUtils.isEmpty(items)) {
-            quotation.setSubtotal(BigDecimal.ZERO);
-            // 假设 quotation.getDiscountAmount() 是用户手动输入的报价单总折扣金额
-            quotation.setDiscountAmount(quotation.getDiscountAmount() != null ? quotation.getDiscountAmount() : BigDecimal.ZERO);
-            quotation.setTaxAmount(BigDecimal.ZERO);
-            quotation.setTotal(BigDecimal.ZERO);
+            quotation.setSubtotal(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
+            quotation.setDiscountAmount(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
+            quotation.setTaxAmount(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
+            quotation.setTotal(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
             return;
         }
 
-        BigDecimal subtotalBeforeQuoteDiscount = BigDecimal.ZERO;
+        BigDecimal subtotalBeforeQuoteDiscount = BigDecimal.ZERO; // 所有行不含税净价之和
         BigDecimal totalTax = BigDecimal.ZERO;
 
         // 汇总所有明细项的金额
         for(QuotationItem item : items) {
-            // 累计行小计（已含行级折扣）
+            // 累计行小计（LineSubtotal 存储的是不含税净价）
             subtotalBeforeQuoteDiscount = subtotalBeforeQuoteDiscount.add(item.getLineSubtotal() != null ? item.getLineSubtotal() : BigDecimal.ZERO);
-            // 累计税额
+            // 累计税额（LineTax 存储的是该行的税额）
             totalTax = totalTax.add(item.getLineTax() != null ? item.getLineTax() : BigDecimal.ZERO);
         }
 
         BigDecimal finalSubtotal = subtotalBeforeQuoteDiscount;
         BigDecimal quoteDiscountAmount = BigDecimal.ZERO;
 
-        // 应用报价单级别的折扣
+        // 应用报价单级别的折扣 (注意: 此处折扣逻辑取决于您的业务规则，假设折扣是直接减去一个金额)
         if(quotation.getDiscountAmount() != null && quotation.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
-            quoteDiscountAmount = quotation.getDiscountAmount();
+            quoteDiscountAmount = quotation.getDiscountAmount().setScale(SCALE, RoundingMode.HALF_UP);
             // 最终小计 = 汇总行小计 - 报价单级别折扣
             finalSubtotal = finalSubtotal.subtract(quoteDiscountAmount);
         }
@@ -428,13 +430,11 @@ public class QuotationServiceImpl implements QuotationService {
         // 总价 = 最终小计 + 总税额
         BigDecimal finalTotal = finalSubtotal.add(totalTax);
 
-        final int scale = 2;
-
         // 设置计算结果，并使用四舍五入
-        quotation.setSubtotal(finalSubtotal.setScale(scale, RoundingMode.HALF_UP));
-        quotation.setDiscountAmount(quoteDiscountAmount.setScale(scale, RoundingMode.HALF_UP));
-        quotation.setTaxAmount(totalTax.setScale(scale, RoundingMode.HALF_UP));
-        quotation.setTotal(finalTotal.setScale(scale, RoundingMode.HALF_UP));
+        quotation.setSubtotal(finalSubtotal.setScale(SCALE, RoundingMode.HALF_UP));
+        quotation.setDiscountAmount(quoteDiscountAmount.setScale(SCALE, RoundingMode.HALF_UP));
+        quotation.setTaxAmount(totalTax.setScale(SCALE, RoundingMode.HALF_UP));
+        quotation.setTotal(finalTotal.setScale(SCALE, RoundingMode.HALF_UP));
     }
 
     /**
@@ -485,56 +485,53 @@ public class QuotationServiceImpl implements QuotationService {
     }
 
     /**
-     * 计算报价明细行的金额
+     * 【已修改】计算报价明细行的金额 (价外税模式)
      * 计算逻辑：
-     * 1. 原始行小计 = 数量 × 单价
-     * 2. 应用折扣：
-     * - 如果 discount <= 1，视为百分比折扣
-     * - 如果 discount > 1，视为金额折扣
-     * 3. 计算行折扣金额 (discountAmount)
-     * 4. 最终行小计（含折扣后）= 原始行小计 - 行折扣金额
-     * 5. 税额 = 最终行小计 × 税率 / 100
-     * 6. 行总计 = 最终行小计 + 税额
+     * 1. 原始行不含税小计 = 数量 × 单价
+     * 2. 行折扣金额 = 原始行不含税小计 × 折扣百分比 / 100  (统一将折扣视为百分比)
+     * 3. 最终行小计（LineSubtotal，不含税净价）= 原始行不含税小计 - 行折扣金额
+     * 4. 税额（LineTax） = 最终行小计 × 税率 (假设税率已是小数，如 0.12)
+     * 5. 行总计（LineTotal）= 最终行小计 + 税额
      *
      * @param item 报价明细项对象
      */
     private void calculateLineTotal(QuotationItem item) {
         BigDecimal quantity = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
         BigDecimal unitPrice = item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO;
-        BigDecimal discount = item.getDiscount() != null ? item.getDiscount() : BigDecimal.ZERO;
+        // 折扣：假设前端传入的是百分比数值 (如 10 代表 10%)
+        BigDecimal discountPercentage = item.getDiscount() != null ? item.getDiscount() : BigDecimal.ZERO;
+        // 税率：假设存储的是小数 (如 0.12 代表 12%)
         BigDecimal taxRate = item.getTaxRate() != null ? item.getTaxRate() : BigDecimal.ZERO;
 
-        // 1. 原始行小计 (未折扣)
-        BigDecimal rawSubtotal = quantity.multiply(unitPrice).setScale(4, RoundingMode.HALF_UP);
+        // 1. 原始行不含税小计 (Raw Net Subtotal)
+        BigDecimal rawSubtotal = quantity.multiply(unitPrice).setScale(CALCULATE_SCALE, RoundingMode.HALF_UP);
 
         BigDecimal finalDiscountAmount = BigDecimal.ZERO;
-        BigDecimal lineSubtotal = rawSubtotal;
+        BigDecimal lineSubtotal = rawSubtotal; // 默认等于原始小计
 
-        // 2. 应用折扣
-        if(discount.compareTo(BigDecimal.ZERO) > 0) {
-            if(discount.compareTo(BigDecimal.ONE) <= 0) {
-                // 百分比折扣 (discount <= 1)
-                // 折扣金额 = 原始小计 * 折扣百分比
-                finalDiscountAmount = rawSubtotal.multiply(discount).setScale(2, RoundingMode.HALF_UP);
-                // 最终小计 = 原始小计 - 折扣金额
-                lineSubtotal = rawSubtotal.subtract(finalDiscountAmount).setScale(2, RoundingMode.HALF_UP);
-            } else {
-                // 金额折扣 (discount > 1)
-                finalDiscountAmount = discount.setScale(2, RoundingMode.HALF_UP);
-                // 最终小计 = 原始小计 - 折扣金额
-                lineSubtotal = rawSubtotal.subtract(finalDiscountAmount).setScale(2, RoundingMode.HALF_UP);
-            }
+        // 2. 计算折扣金额 (统一按百分比处理)
+        if(discountPercentage.compareTo(BigDecimal.ZERO) > 0) {
+            // 折扣金额 = 原始小计 * 折扣百分比 / 100
+            finalDiscountAmount = rawSubtotal.multiply(discountPercentage)
+                    .divide(new BigDecimal("100"), CALCULATE_SCALE, RoundingMode.HALF_UP);
+
+            // 最终行不含税净价 = 原始小计 - 折扣金额
+            lineSubtotal = rawSubtotal.subtract(finalDiscountAmount).setScale(SCALE, RoundingMode.HALF_UP);
+        } else {
+            lineSubtotal = lineSubtotal.setScale(SCALE, RoundingMode.HALF_UP);
         }
-        // 3. 设置折扣金额和最终行小计
-        item.setDiscountAmount(finalDiscountAmount);
+
+        // 3. 设置折扣金额和最终行小计（LineSubtotal 为不含税净价）
+        item.setDiscountAmount(finalDiscountAmount.setScale(SCALE, RoundingMode.HALF_UP));
         item.setLineSubtotal(lineSubtotal);
 
-        // 4. 计算税额 = 最终行小计 × 税率 / 100
-        BigDecimal lineTax = lineSubtotal.multiply(taxRate).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+        // 4. 计算税额 (价外税模式：税额 = 不含税净价 * 税率)
+        // 假设 taxRate 已经是小数 (0.12)，无需再除以 100
+        BigDecimal lineTax = lineSubtotal.multiply(taxRate).setScale(SCALE, RoundingMode.HALF_UP);
         item.setLineTax(lineTax);
 
         // 5. 计算行总计 = 最终行小计 + 税额
-        item.setLineTotal(lineSubtotal.add(lineTax).setScale(2, RoundingMode.HALF_UP));
+        item.setLineTotal(lineSubtotal.add(lineTax).setScale(SCALE, RoundingMode.HALF_UP));
     }
 
     /**
@@ -553,20 +550,27 @@ public class QuotationServiceImpl implements QuotationService {
     }
 
     /**
-     * 获取系统默认税率
-     * 优先级：系统设置 > 默认值12% (注意：已将默认值从13%改为12%以匹配代码尾部)
+     * 【已修改】获取系统默认税率 (返回小数形式，如 0.12)
+     * 优先级：系统设置 > 默认值0.12
      *
-     * @return 默认税率（百分比，如12表示12%）
+     * @return 默认税率（小数形式，如 0.12）
      */
     private BigDecimal getDefaultTaxRate() {
         String taxRateStr = systemSettingsService.getSetting("default_tax_rate");
+        // 如果系统设置存储的是百分比（如 12），则需要转换
+        // 如果系统设置存储的是小数（如 0.12），则直接使用
         if(taxRateStr != null) {
             try {
-                return new BigDecimal(taxRateStr);
+                BigDecimal rate = new BigDecimal(taxRateStr);
+                // 假设系统设置存储的是百分比 (如12)，则进行转换
+                if (rate.compareTo(BigDecimal.ONE) >= 0) {
+                    return rate.divide(new BigDecimal("100"), SCALE, RoundingMode.HALF_UP);
+                }
+                return rate.setScale(SCALE, RoundingMode.HALF_UP);
             } catch(Exception e) {
                 // 忽略解析错误，使用默认值
             }
         }
-        return new BigDecimal("12"); // 默认12%
+        return new BigDecimal("0.12"); // 默认 0.12 (12%)
     }
 }

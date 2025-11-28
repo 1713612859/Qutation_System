@@ -3,6 +3,7 @@ package com.example.quotation.entity;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -16,7 +17,7 @@ import java.util.List;
  *
  * @author System
  */
-@TableName("quotations")
+@TableName(value = "quotations", autoResultMap = true)
 @Data
 public class Quotation {
     /**
@@ -138,4 +139,28 @@ public class Quotation {
      */
     @TableField(exist = false)
     private List<QuotationItem> items;
+
+    /**
+     * 操作人
+     */
+    private String paymentTerms;
+
+    /**
+     * 敬称
+     */
+    private String validity;
+
+
+    /**
+     * 敬称
+     */
+    private String availability;
+
+
+    // -------------------
+    // 银行账户信息，JSON 存储
+    // -------------------
+    @TableField(typeHandler = JacksonTypeHandler.class)
+    private List<BankAccount> bankAccounts;
+
 }

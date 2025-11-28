@@ -29,6 +29,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
 
         // 3. 递归设置子分类，构建树形结构
         rootCategories.forEach(root->{
+            System.out.println("root = " + root);
             root.setChildren(getChildren(root, allCategories));
         });
 
