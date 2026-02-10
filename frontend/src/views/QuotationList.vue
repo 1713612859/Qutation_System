@@ -96,7 +96,6 @@
           item-key="id"
           class="d-none d-md-block"
           :multi-sort="true"
-          :sort-by="[{ key: 'issueDate', order: 'desc' }]"
       >
         <template v-slot:item.total="{ item }">
           {{ item.currency }} {{ item.total }}
@@ -295,13 +294,18 @@ export default {
       isDeleting: false,
 
       headers: [
+           { title: 'ID', key: 'id', sortable: true },
         { title: 'Quotation Number', key: 'quoteNumber', sortable: true },
         { title: 'Title', key: 'title', sortable: true },
         { title: 'Customer', key: 'customerName', sortable: true },
+        { title: 'Subtotal', key: 'subtotal', sortable: true },
+        { title: 'Discount', key: 'discountAmount', sortable: true },
+        { title: 'EWT Amount', key: 'ewtAmount', sortable: true },
+        { title: 'Tax Amount', key: 'taxAmount', sortable: true },
         { title: 'Total Amount', key: 'total', sortable: true },
         { title: 'Status', key: 'status', sortable: true },
         { title: 'Issue Date', key: 'issueDate', sortable: true },
-        { title: 'Operator', key: 'operatorName', sortable: false },
+        { title: 'Operator', key: 'operator', sortable: false },
         { title: 'Operation Time', key: 'createdAt', sortable: true },
         { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
       ]

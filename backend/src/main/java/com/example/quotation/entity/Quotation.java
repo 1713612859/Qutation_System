@@ -163,4 +163,20 @@ public class Quotation {
     @TableField(typeHandler = JacksonTypeHandler.class)
     private List<BankAccount> bankAccounts;
 
+
+    /**
+     * exclude withholding tax
+     *
+     *  默认 是 1% 商品类 或者  2% 服务类
+     *  计算公式为 商品去税 ，基于去税价 在 折扣 1%
+     *  例如 含税价 112 ，税额 12% = 12 ， 折扣价 为 100 * 0.01 = 1 ,所以 应付为 111
+     */
+    private BigDecimal ewt;
+
+
+    @TableField(value = "ewt_amount")
+    private BigDecimal ewtAmount;
+
+
+
 }

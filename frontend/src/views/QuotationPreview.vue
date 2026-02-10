@@ -74,12 +74,16 @@
             <span class="label">Total Discount:</span>
             <span class="value">-{{ quotation.currency }} {{ format(quotation.discountAmount) }}</span>
           </div>
+            <div v-if="quotation.ewtAmount && quotation.ewtAmount > 0" class="total-row discount-row">
+            <span class="label">Less EWT Amount:</span>
+            <span class="value">-{{ quotation.currency }} {{ format(quotation.ewtAmount) }}</span>
+          </div>
           <div class="total-row tax-row">
-            <span class="label">VAT Tax (12%):</span>
+            <span class="label">VAT Amount (12%):</span>
             <span class="value">{{ quotation.currency }} {{ format(quotation.taxAmount) }}</span>
           </div>
           <div class="total-row grand-total-row">
-            <span class="label">TOTAL AMOUNT  :</span>
+            <span class="label">TOTAL Amount  :</span>
             <span class="value">{{ quotation.currency }} {{ format(quotation.total) }}</span>
           </div>
         </div>

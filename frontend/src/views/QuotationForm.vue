@@ -111,6 +111,18 @@
           </v-row>
           <v-row>
             <v-col cols="12">
+              <div class="d-flex align-center">
+                <span class="mr-4 font-weight-medium">EWT (Withholding Tax):</span>
+                <v-radio-group v-model.number="quotation.ewt" inline class="mt-0" @update:model-value="recalculateAll">
+                  <v-radio label="None" :value="0"></v-radio>
+                  <v-radio label="1% (Products)" :value="0.01"></v-radio>
+                  <v-radio label="2% (Services)" :value="0.02"></v-radio>
+                </v-radio-group>
+              </div>
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12">
               <v-select
                   v-model="selectedPackageId"
                   :items="packages"
@@ -240,6 +252,10 @@
               {{ (item.taxRate * 100).toFixed(0) || 0 }}%
             </template>
 
+            <template v-slot:item.lineTax="{ item }">
+              {{ item.lineTax || '0.00' }}
+            </template>
+
             <template v-slot:item.lineTotal="{ item }">
               {{ item.lineTotal }}
             </template>
@@ -329,8 +345,11 @@
                       <v-col cols="6" v-else>
                         <v-text-field :model-value="item.discount || 0" label="Discount (%)" density="compact" hide-details readonly></v-text-field>
                       </v-col>
-                      <v-col cols="12">
+                      <v-col cols="6">
                         <v-text-field :model-value="(item.taxRate * 100).toFixed(0) || 0" label="Tax Rate (%)" density="compact" hide-details readonly></v-text-field>
+                      </v-col>
+                      <v-col cols="6">
+                        <v-text-field :model-value="item.lineTax || '0.00'" label="Tax Amount" density="compact" hide-details readonly></v-text-field>
                       </v-col>
                     </v-row>
 
@@ -353,6 +372,7 @@
         <v-card-text class="pa-2 pa-sm-4 text-right">
           <h3>Subtotal (Net): {{ quotation.currency }} {{ quotation.subtotal }}</h3>
           <h3 v-if="quotation.discountAmount > 0">Discount: -{{ quotation.currency }} {{ quotation.discountAmount }}</h3>
+          <h3 v-if="quotation.ewtAmount > 0">EWT: -{{ quotation.currency }} {{ quotation.ewtAmount }}</h3>
           <h3>Tax Amount: +{{ quotation.currency }} {{ quotation.taxAmount }}</h3>
           <v-divider class="my-2"></v-divider>
           <h2>Total (Gross): {{ quotation.currency }} {{ quotation.total }}</h2>
@@ -373,13 +393,36 @@ import html2canvas from 'html2canvas'
 
 export default {
   name: 'QuotationForm',
+  // ===== 常量定义 =====
+  CONSTANTS: {
+    MIN_QUANTITY: 0.01,
+    MAX_DISCOUNT: 100,
+    MIN_DISCOUNT: 0,
+    MAX_TAX_RATE: 1,
+    MIN_TAX_RATE: 0,
+    DECIMAL_PLACES: 2,
+    DEBOUNCE_WAIT: 300,
+    TIMEOUT_MS: 10000
+  },
   data() {
     return {
-      valid: false, // 表单校验状态
-      // 验证规则
+      valid: false,
+      isLoading: false, // 添加加载状态
       rules: {
         required: value => !!value || 'Required.',
-        positive: value => (value && value > 0) || 'Must be > 0.'
+        positive: value => (value && Number(value) > 0) || 'Must be > 0.',
+        validDiscount: value => {
+          const num = Number(value)
+          return (num >= 0 && num <= 100) || 'Discount must be between 0 and 100'
+        },
+        validQuantity: value => {
+          const num = Number(value)
+          return (num > 0) || 'Quantity must be greater than 0'
+        },
+        validPrice: value => {
+          const num = Number(value)
+          return (num >= 0) || 'Price cannot be negative'
+        }
       },
       salutations: ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.'],
       isSuperAdmin: false,
@@ -389,20 +432,37 @@ export default {
         { title: 'Qty', key: 'quantity', sortable: false, width: '80px' },
         { title: 'Unit Price', key: 'unitPrice', sortable: false, width: '100px' },
         { title: 'Disc (%)', key: 'discount', sortable: false, width: '80px' },
-        { title: 'Tax Rate', key: 'taxRate', sortable: false, width: '80px' }, // <--- 新增 Tax Rate 字段
-        { title: 'Total (Net)', key: 'lineTotal', sortable: false, width: '100px' }, // <--- 标题修改
+        { title: 'Tax Rate', key: 'taxRate', sortable: false, width: '80px' },
+        { title: 'Tax Amount', key: 'lineTax', sortable: false, width: '100px' },
+        { title: 'Total (Net)', key: 'lineTotal', sortable: false, width: '100px' },
         { title: 'Actions', key: 'actions', sortable: false, width: '80px' },
       ],
       quotation: {
+        id: null,
+        quoteNumber: '',
+        title: '',
         items: [],
         currency: 'PHP',
         status: 'DRAFT',
         subtotal: 0,
         discountAmount: 0,
-        taxAmount: 0, // <--- 新增总税额字段
+        ewtAmount: 0,
+        taxAmount: 0,
         total: 0,
         operator: null,
-        salutation: 'Mr.'
+        salutation: 'Mr.',
+        customerId: null,
+        issueDate: this.getTodayDate(),
+        expiryDate: this.getDateAfterDays(7),
+        ewt: 0,
+        notes: '',
+        bankAccounts: [
+          {
+            payee: 'ZUNO GROUP INC.',
+            bankName: 'AUB (Asia United Bank)',
+            accountNumber: '013-01-008037-5'
+          }
+        ]
       },
       customers: [],
       products: [],
@@ -411,13 +471,66 @@ export default {
     }
   },
   mounted() {
-    this.loadCustomers()
-    this.loadProducts()
-    this.loadPackages()
-    this.me()
+    this.loadInitialData()
     if (this.$route.params.id) this.loadQuotation(this.$route.params.id)
   },
   methods: {
+    // ===== 工具函数 =====
+    getTodayDate() {
+      const today = new Date()
+      return today.toISOString().split('T')[0]
+    },
+    getDateAfterDays(days) {
+      const date = new Date()
+      date.setDate(date.getDate() + days)
+      return date.toISOString().split('T')[0]
+    },
+    /**
+     * 精确的浮点数舍入
+     */
+    roundNumber(num, decimals = 2) {
+      if (typeof num !== 'number' || isNaN(num)) return 0
+      return Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals)
+    },
+    /**
+     * 验证数字范围
+     */
+    validateNumberRange(value, min, max, fieldName = 'Value') {
+      const num = Number(value)
+      if (isNaN(num)) return `${fieldName} must be a number`
+      if (num < min) return `${fieldName} cannot be less than ${min}`
+      if (num > max) return `${fieldName} cannot be greater than ${max}`
+      return null
+    },
+    /**
+     * 安全获取嵌套对象属性
+     */
+    safeGet(obj, path, defaultValue = null) {
+      try {
+        return path.split('.').reduce((acc, part) => acc?.[part], obj) ?? defaultValue
+      } catch (e) {
+        return defaultValue
+      }
+    },
+    /**
+     * 加载初始数据
+     */
+    async loadInitialData() {
+      try {
+        this.isLoading = true
+        await Promise.all([
+          this.loadCustomers(),
+          this.loadProducts(),
+          this.loadPackages(),
+          this.me()
+        ])
+      } catch (error) {
+        console.error('Failed to load initial data:', error)
+        this.$snackbar?.show('Failed to load some data. Please refresh.', 'error')
+      } finally {
+        this.isLoading = false
+      }
+    },
     async previewPdf() {
       // PDF Preview Logic (不变)
       const element = document.getElementById('quotation-preview-area')
@@ -479,9 +592,10 @@ export default {
     async loadCustomers() {
       try {
         const res = await api.get('/customers')
-        this.customers = res.data.data || []
+        this.customers = Array.isArray(res.data?.data) ? res.data.data : []
       } catch (error) {
         console.error('Failed to load customers:', error)
+        this.customers = []
         this.$snackbar?.show('Failed to load customers', 'error')
       }
     },
@@ -489,13 +603,18 @@ export default {
     async loadProducts() {
       try {
         const res = await api.get('/products')
-        // 确保税率字段存在，默认为 0
-        this.products = res.data.data.filter(p => p.enabled !== false).map(p => ({
-          ...p,
-          taxRate: parseFloat(p.taxRate) || 0
-        }))
+        const data = Array.isArray(res.data?.data) ? res.data.data : []
+        // 过滤并规范化数据
+        this.products = data
+          .filter(p => p.enabled !== false && p.id)
+          .map(p => ({
+            ...p,
+            taxRate: this.roundNumber(parseFloat(p.taxRate) || 0),
+            defaultPrice: this.roundNumber(parseFloat(p.defaultPrice) || 0)
+          }))
       } catch (error) {
         console.error('Failed to load products:', error)
+        this.products = []
         this.$snackbar?.show('Failed to load products', 'error')
       }
     },
@@ -515,26 +634,41 @@ export default {
     async loadPackages() {
       try {
         const res = await api.get('/packages')
-        this.packages = res.data.data.filter(p => p.enabled !== false)
+        this.packages = Array.isArray(res.data?.data) 
+          ? res.data.data.filter(p => p.enabled !== false && p.id)
+          : []
       } catch (error) {
         console.error('Failed to load packages:', error)
+        this.packages = []
         this.$snackbar?.show('Failed to load packages', 'error')
       }
     },
 
     async loadQuotation(id) {
+      if (!id) return
       try {
+        this.isLoading = true
         const res = await api.get(`/quotations/${id}`)
-        this.quotation = res.data.data.quotation
-        this.quotation.items = res.data.data.items || []
+        const data = res.data?.data
+        
+        if (!data?.quotation) {
+          throw new Error('Invalid quotation data')
+        }
 
-        // 确保 items 有 taxRate 属性，从后端记录中获取或从产品中获取
-        this.quotation.items.forEach(item => {
+        this.quotation = data.quotation
+        this.quotation.items = Array.isArray(data.items) ? data.items : []
+
+        // 规范化并验证每个item
+        this.quotation.items.forEach((item, idx) => {
+          if (!item.productId) return
+          
           const productInfo = this.products.find(p => p.id === item.productId)
-          // 如果后端没有明确提供 taxRate，则从产品中获取或默认为 0
-          let taxRate = item.taxRate !== undefined ? item.taxRate : (productInfo ? productInfo.taxRate : 0)
-          item.taxRate = parseFloat(taxRate) || 0
-          // 重新计算行总价以确保前端显示正确 (后端的 lineTotal 应该是行不含税净价)
+          item.taxRate = this.roundNumber(parseFloat(item.taxRate) ?? (productInfo?.taxRate || 0))
+          item.quantity = this.roundNumber(parseFloat(item.quantity) || 0, 4)
+          item.unitPrice = this.roundNumber(parseFloat(item.unitPrice) || 0)
+          item.discount = this.roundNumber(Math.min(Math.max(parseFloat(item.discount) || 0, 0), 100))
+          item.lineNumber = idx + 1
+          
           this.calculateLine(item)
         })
 
@@ -542,6 +676,10 @@ export default {
       } catch (error) {
         console.error('Failed to load quotation:', error)
         this.$snackbar?.show('Failed to load quotation', 'error')
+        // 重定向回列表页面
+        setTimeout(() => this.$router.push('/quotations'), 1500)
+      } finally {
+        this.isLoading = false
       }
     },
 
@@ -549,97 +687,137 @@ export default {
       if (!packageId) return
 
       try {
+        this.isLoading = true
         const res = await api.get(`/packages/${packageId}`)
-        const pkg = res.data.data
+        const pkg = res.data?.data
 
-        if (pkg && pkg.items && pkg.items.length > 0) {
-          this.quotation.items = []
-          this.quotation.title = pkg.name
-          this.quotation.currency = pkg.currency || 'PHP'
-          this.quotation.packageId = packageId
-
-          const currentPackageName = pkg.name
-
-          pkg.items.forEach((pkgItem, index) => {
-            const productInfo = this.products.find(p => p.id === pkgItem.productId)
-
-            const unitPrice = pkgItem.unitPrice !== undefined ? pkgItem.unitPrice : (productInfo ? productInfo.defaultPrice : 0)
-
-            // 获取税率：套餐项税率 > 产品税率 > 0
-            const taxRate = pkgItem.taxRate !== undefined ? pkgItem.taxRate : (productInfo ? productInfo.taxRate : 0)
-
-
-            const newItem = {
-              lineNumber: index + 1,
-              productId: pkgItem.productId,
-              productName: productInfo ? productInfo.name : 'Unknown Product',
-              description: pkgItem.description || (productInfo ? productInfo.description : ''),
-              specifications: productInfo ? productInfo.specifications : '',
-              packageName: currentPackageName,
-              packageId: packageId,
-              quantity: pkgItem.quantity || 1,
-              unitPrice: unitPrice,
-              discount: pkgItem.discount || 0,
-              taxRate: parseFloat(taxRate) || 0, // <--- 存储税率 (0.12)
-              lineTotal: 0,
-              isFromPackage: true
-            }
-
-            this.quotation.items.push(newItem)
-            this.calculateLine(newItem)
-          })
-
-          this.calculateTotal()
-          this.selectedPackageId = null
-
-        } else {
+        if (!pkg?.items || !Array.isArray(pkg.items) || pkg.items.length === 0) {
           this.$snackbar?.show('This package has no detail items.', 'warning')
+          this.selectedPackageId = null
+          return
         }
-      } catch (e) {
-        console.error('Failed to load package:', e)
+
+        this.quotation.items = []
+        this.quotation.title = pkg.name || 'Untitled'
+        this.quotation.currency = pkg.currency || 'PHP'
+        this.quotation.packageId = packageId
+
+        const currentPackageName = pkg.name || ''
+
+        pkg.items.forEach((pkgItem, index) => {
+          if (!pkgItem.productId) return // 跳过无效项
+          
+          const productInfo = this.products.find(p => p.id === pkgItem.productId)
+          if (!productInfo) {
+            console.warn(`Product ${pkgItem.productId} not found in loaded products`)
+            return
+          }
+
+          const unitPrice = this.roundNumber(pkgItem.unitPrice ?? productInfo.defaultPrice)
+          const taxRate = this.roundNumber(pkgItem.taxRate ?? productInfo.taxRate)
+          const quantity = this.roundNumber(Math.max(parseFloat(pkgItem.quantity) || 1, 0.01), 4)
+          const discount = this.roundNumber(Math.min(Math.max(parseFloat(pkgItem.discount) || 0, 0), 100))
+
+          const newItem = {
+            lineNumber: index + 1,
+            productId: pkgItem.productId,
+            productName: productInfo.name || 'Unknown',
+            description: pkgItem.description || productInfo.description || '',
+            specifications: productInfo.specifications || '',
+            packageName: currentPackageName,
+            packageId: packageId,
+            quantity: quantity,
+            unitPrice: unitPrice,
+            discount: discount,
+            taxRate: taxRate,
+            lineTax: 0,
+            lineTotal: 0,
+            isFromPackage: true
+          }
+
+          this.quotation.items.push(newItem)
+          this.calculateLine(newItem)
+        })
+
+        this.calculateTotal()
+        this.selectedPackageId = null
+        this.$snackbar?.show('Package loaded successfully', 'success')
+      } catch (error) {
+        console.error('Failed to load package:', error)
         this.$snackbar?.show('Failed to load package information.', 'error')
+      } finally {
+        this.isLoading = false
       }
     },
 
     onCustomerChange(customerId) {
-      const c = this.customers.find(x => x.id === customerId)
-      if (c) {
-        this.quotation.customerName = c.customerName
-        this.quotation.customerFullName = c.customerName
-        this.quotation.salutation = c.salutation || 'Mr.'
-        this.quotation.title = c.companyName || 'Unknown'
+      if (!customerId) return
+      
+      const customer = this.customers.find(x => x?.id === customerId)
+      if (!customer) {
+        console.warn(`Customer ${customerId} not found`)
+        return
       }
+      
+      this.quotation.customerId = customerId
+      this.quotation.customerName = customer.customerName || ''
+      this.quotation.customerFullName = customer.customerName || ''
+      this.quotation.salutation = customer.salutation || 'Mr.'
+      this.quotation.title = customer.companyName || 'Unknown'
     },
 
     onProductChange(row) {
-      const p = this.products.find(x => x.id === row.productId)
-      if (p) {
-        row.productName = p.name
-        row.unitPrice = p.defaultPrice
-        row.description = p.description || ''
-        row.specifications = p.specifications || ''
-        row.taxRate = parseFloat(p.taxRate) || 0 // <--- 更新税率
+      if (!row?.productId) {
+        // 清空产品信息
+        row.productName = ''
+        row.unitPrice = 0
+        row.description = ''
+        row.specifications = ''
+        row.taxRate = 0
         row.isFromPackage = false
         row.packageName = null
-      } else {
-        row.taxRate = 0 // 清除税率如果产品被清除
+        this.calculateLine(row)
+        return
       }
+      
+      const product = this.products.find(x => x?.id === row.productId)
+      if (!product) {
+        console.warn(`Product ${row.productId} not found`)
+        row.taxRate = 0
+        this.calculateLine(row)
+        return
+      }
+      
+      // 更新产品信息
+      row.productName = product.name || ''
+      row.unitPrice = this.roundNumber(product.defaultPrice || 0)
+      row.description = product.description || ''
+      row.specifications = product.specifications || ''
+      row.taxRate = this.roundNumber(product.taxRate || 0)
+      row.isFromPackage = false
+      row.packageName = null
+      
       this.calculateLine(row)
     },
 
     addItem() {
-      this.quotation.items.push({
+      const newItem = {
         lineNumber: this.quotation.items.length + 1,
+        productId: null,
+        productName: '',
         quantity: 1,
         unitPrice: 0,
         discount: 0,
-        taxRate: 0, // <--- 初始化税率
+        taxRate: 0,
+        lineTax: 0,
+        lineEWT: 0,
         lineTotal: 0,
         description: '',
         specifications: '',
         isFromPackage: false,
         packageName: null
-      })
+      }
+      this.quotation.items.push(newItem)
       this.calculateTotal()
     },
 
@@ -652,122 +830,236 @@ export default {
     },
 
     /**
-     * 【已修改】计算报价明细行的金额 (价外税模式 - Tax Exclusive)
-     * lineTotal = (Qty * UnitPrice) - Discount
-     * 行总价为不含税净价
+     * 重新计算所有行（当报价单级别的设置改变时调用）
+     */
+    recalculateAll() {
+      if (!Array.isArray(this.quotation.items)) return
+      this.quotation.items.forEach(item => {
+        if (item) this.calculateLine(item)
+      })
+      this.calculateTotal()
+    },
+
+    /**
+     * 计算报价明细行的金额 (价外税+EWT)
+     * 计算流程：
+     *   1. 反算不含税单价（如果有税）
+     *   2. 计算行不含税总额 = Qty × 不含税单价
+     *   3. 应用折扣
+     *   4. 计算EWT（基于折扣后不含税价）
+     *   5. 计算税额（基于折扣后不含税价）
+     *   6. lineTotal = 折扣后不含税价 - EWT（供汇总用）
+     *   7. lineTax = 税额（独立显示和计算）
      */
     calculateLine(row) {
+      if (!row) return
+      
+      try {
+        // 1. 安全转换和验证数值
+        let q = parseFloat(row.quantity) || 0
+        let p = parseFloat(row.unitPrice) || 0
+        let d = this.isSuperAdmin ? (parseFloat(row.discount) || 0) : 0
+        let ewt = Math.min(Math.max(parseFloat(this.quotation.ewt) || 0, 0), 1)
+        let taxRate = parseFloat(row.taxRate) || 0
 
+        // 2. 边界检查和纠正
+        q = Math.max(q, 0)
+        p = Math.max(p, 0)
+        d = Math.min(Math.max(d, 0), 100)
+        taxRate = Math.min(Math.max(taxRate, 0), 1)
 
-      console.log(row,'row.....................')
+        // 3. 关键：根据税率判断 unitPrice 的含义
+        let netUnitPrice = p
+        
+        if (taxRate > 0) {
+          // unitPrice 是含税价，反算不含税单价
+          netUnitPrice = this.roundNumber(p / (1 + taxRate))
+        }
+        // taxRate = 0 时，unitPrice 已是不含税价
 
-      const q = parseFloat(row.quantity) || 0
-      const p = parseFloat(row.unitPrice) || 0
-      // 只有超级管理员可以应用行折扣
-      const d = this.isSuperAdmin ? (parseFloat(row.discount) || 0) : 0
+        // 4. 计算不含税行总额
+        const rawNetLineTotal = this.roundNumber(q * netUnitPrice)
+        
+        // 5. 应用行折扣
+        const lineDiscount = this.roundNumber(rawNetLineTotal * (d / 100))
+        const netLineTotalAfterDiscount = this.roundNumber(rawNetLineTotal - lineDiscount)
+        
+        // 6. 计算EWT（基于折扣后不含税价）
+        const ewtAmount = this.roundNumber(netLineTotalAfterDiscount * ewt)
+        
+        // 7. 计算税额（基于折扣后不含税价）
+        const lineTax = this.roundNumber(netLineTotalAfterDiscount * taxRate)
+        
+        // 8. lineTotal用于汇总时的净价（减EWT后）
+        const lineTotal = this.roundNumber(netLineTotalAfterDiscount - ewtAmount)
 
-      // 1. 原始行不含税总价 (Net Subtotal before line discount)
-      const rawNetPrice = q * p
-
-      // 2. 行折扣 (Discount is applied to the raw net price)
-      // 假设 d 是百分比 (如 10 代表 10%)
-      const lineDiscount = rawNetPrice * (d / 100)
-
-      // 3. 行不含税净价 (Line Net Price after line discount)
-      const lineNetPrice = rawNetPrice - lineDiscount
-
-      // lineTotal 存储的是不含税的净价
-      row.lineTotal = lineNetPrice.toFixed(2)
-
-
+        // 9. 更新数据
+        row.quantity = this.roundNumber(q, 4)
+        row.unitPrice = this.roundNumber(p)
+        row.discount = this.roundNumber(d)
+        row.taxRate = this.roundNumber(taxRate)
+        row.lineTotal = lineTotal.toFixed(2)
+        row.lineTax = lineTax.toFixed(2)
+        row.lineEWT = ewtAmount.toFixed(2)
+      } catch (error) {
+        console.error('Error calculating line:', error, row)
+        row.lineTotal = '0.00'
+        row.lineTax = '0.00'
+      }
 
       this.calculateTotal()
     },
 
     /**
-     * 【已修改】计算报价单总价 (价外税模式 - Tax Exclusive)
-     * subtotal = 所有行不含税净价之和
-     * taxAmount = subtotal * max(taxRate) (简易逻辑: 假设只有一个税率, 复杂系统应按行累计)
-     * total = subtotal + taxAmount
+     * 计算报价单总价（包含EWT计算）
+     * subtotal = 所有行EWT后的价格之和
+     * taxAmount = 所有行税额之和（仅用于显示）
+     * total = subtotal（不包含税额）
      */
     calculateTotal() {
-      let subtotal = 0 // 所有行不含税净价之和
-      let discountAmount = 0 // 所有行折扣金额之和
-      let totalTaxAmount = 0 // 总税额
+      try {
+        let subtotal = 0
+        let discountAmount = 0
+        let ewtAmount = 0
+        let totalTaxAmount = 0
 
-      this.quotation.items.forEach(i => {
-        const q = parseFloat(i.quantity) || 0
-        const p = parseFloat(i.unitPrice) || 0
-        const d = this.isSuperAdmin ? (parseFloat(i.discount) || 0) : 0
+        // 遍历并累计
+        if (Array.isArray(this.quotation.items)) {
+          this.quotation.items.forEach(i => {
+            if (!i) return
+            
+            const q = Math.max(parseFloat(i.quantity) || 0, 0)
+            const p = Math.max(parseFloat(i.unitPrice) || 0, 0)
+            const d = Math.min(Math.max(parseFloat(i.discount) || 0, 0), 100)
+            const t = Math.min(Math.max(parseFloat(i.taxRate) || 0, 0), 1)
+            const ewt = Math.min(Math.max(parseFloat(this.quotation.ewt) || 0, 0), 1)
 
-        const taxRate = parseFloat(i.taxRate) || 0
+            // 根据税率判断unitPrice含义：反算不含税单价
+            let netUnitPrice = p
+            if (t > 0) {
+              netUnitPrice = this.roundNumber(p / (1 + t))
+            }
 
-        // 原始行不含税总价
-        const originalPrice = q * p
+            // 计算各环节金额
+            const rawNetLineTotal = this.roundNumber(q * netUnitPrice)
+            const lineDiscount = this.roundNumber(rawNetLineTotal * (d / 100))
+            const netLineTotalAfterDiscount = this.roundNumber(rawNetLineTotal - lineDiscount)
+            const lineEWT = this.roundNumber(netLineTotalAfterDiscount * ewt)
+            const lineTax = this.roundNumber(netLineTotalAfterDiscount * t)
 
-        // 行折扣金额
-        const lineDiscount = originalPrice * (d / 100)
-        discountAmount += lineDiscount
+            subtotal += netLineTotalAfterDiscount
+            discountAmount += lineDiscount
+            ewtAmount += lineEWT
+            totalTaxAmount += lineTax
+          })
+        }
 
-        // 行不含税净价 (Net Subtotal after line discount)
-        const lineNetPrice = originalPrice - lineDiscount
-        subtotal += lineNetPrice
+        // 精确舍入
+        subtotal = this.roundNumber(subtotal)
+        discountAmount = this.roundNumber(discountAmount)
+        ewtAmount = this.roundNumber(ewtAmount)
+        totalTaxAmount = this.roundNumber(totalTaxAmount)
+        
+        // 最终应付 = 不含税净价 - EWT + 税额
+        const finalTotal = this.roundNumber(subtotal - ewtAmount + totalTaxAmount)
 
-        // 计算该行税额 (Tax Exclusive: Net Price * Tax Rate)
-        const lineTax = lineNetPrice * taxRate
-        totalTaxAmount += lineTax
-      })
-
-      // 最终总价 = 不含税小计 + 总税额
-      const finalTotal = subtotal + totalTaxAmount
-
-      // 设置计算结果，保留两位小数
-      this.quotation.subtotal = subtotal.toFixed(2)
-      this.quotation.discountAmount = discountAmount.toFixed(2) // 记录行折扣总和
-      this.quotation.taxAmount = totalTaxAmount.toFixed(2) // 记录总税额
-      this.quotation.total = finalTotal.toFixed(2)
+        // 更新
+        this.quotation.subtotal = subtotal.toFixed(2)
+        this.quotation.discountAmount = discountAmount.toFixed(2)
+        this.quotation.ewtAmount = ewtAmount.toFixed(2)
+        this.quotation.taxAmount = totalTaxAmount.toFixed(2)
+        this.quotation.total = finalTotal.toFixed(2)
+      } catch (error) {
+        console.error('Error calculating total:', error)
+        this.quotation.subtotal = '0.00'
+        this.quotation.discountAmount = '0.00'
+        this.quotation.ewtAmount = '0.00'
+        this.quotation.taxAmount = '0.00'
+        this.quotation.total = '0.00'
+      }
     },
 
     async save() {
-      // 1. 验证表单字段
-      const { valid } = await this.$refs.form.validate()
-
-      if (!valid) {
-        this.$snackbar?.show('Please check the fields marked in red.', 'error')
-        return
-      }
-
-      // 2. 逻辑验证：必须有产品
-      if (this.quotation.items.length === 0) {
-        this.$snackbar?.show('Please add at least one quotation item.', 'warning')
-        return
-      }
-
-      const dataToSave = JSON.parse(JSON.stringify(this.quotation))
-
-      // 在发送给后端之前，确保所有数字字段是正确的类型，并设置 taxRate 字段
-      dataToSave.items = dataToSave.items.map(item => ({
-        ...item,
-        quantity: parseFloat(item.quantity) || 0,
-        unitPrice: parseFloat(item.unitPrice) || 0,
-        discount: this.isSuperAdmin ? (parseFloat(item.discount) || 0) : 0,
-        taxRate: parseFloat(item.taxRate) || 0, // <--- 确保 taxRate 被发送到后端
-      }))
-
-      // 确保发送所有计算结果到后端
-      dataToSave.taxAmount = parseFloat(this.quotation.taxAmount)
-      dataToSave.subtotal = parseFloat(this.quotation.subtotal)
-      dataToSave.total = parseFloat(this.quotation.total)
-
       try {
-        await api.post('/quotations', dataToSave)
-        this.$snackbar?.show('Saved successfully', 'success')
-        this.$router.push('/quotations')
-      } catch (e) {
-        console.error('Failed to save quotation:', e)
-        this.$snackbar?.show('Failed to save quotation, please check the data.', 'error')
+        // 1. 表单验证
+        const { valid } = await this.$refs.form.validate()
+        if (!valid) {
+          this.$snackbar?.show('Please check the fields marked in red.', 'error')
+          return
+        }
+
+        // 2. 业务逻辑验证
+        const validationError = this.validateQuotation()
+        if (validationError) {
+          this.$snackbar?.show(validationError, 'error')
+          return
+        }
+
+        // 3. 准备数据
+        const dataToSave = JSON.parse(JSON.stringify(this.quotation))
+        dataToSave.items = (dataToSave.items || []).map(item => {
+          if (!item.productId) {
+            throw new Error('All items must have a product selected')
+          }
+          return {
+            ...item,
+            quantity: this.roundNumber(parseFloat(item.quantity) || 0, 4),
+            unitPrice: this.roundNumber(parseFloat(item.unitPrice) || 0),
+            discount: this.isSuperAdmin ? this.roundNumber(Math.min(Math.max(parseFloat(item.discount) || 0, 0), 100)) : 0,
+            taxRate: this.roundNumber(parseFloat(item.taxRate) || 0),
+            lineTax: this.roundNumber(parseFloat(item.lineTax) || 0),
+            lineEWT: this.roundNumber(parseFloat(item.lineEWT) || 0),
+            lineTotal: this.roundNumber(parseFloat(item.lineTotal) || 0)
+          }
+        })
+
+        // 4. 保存
+        this.isLoading = true
+        const res = await api.post('/quotations', dataToSave)
+        
+        if (res.data?.code === 200 || res.status === 200) {
+          this.$snackbar?.show('Saved successfully', 'success')
+          setTimeout(() => this.$router.push('/quotations'), 500)
+        } else {
+          throw new Error(res.data?.msg || 'Save failed')
+        }
+      } catch (error) {
+        console.error('Failed to save quotation:', error)
+        const errorMsg = error.message || 'Failed to save quotation, please check the data.'
+        this.$snackbar?.show(errorMsg, 'error')
+      } finally {
+        this.isLoading = false
       }
-    }
+    },
+    
+    /**
+     * 验证整个报价单的有效性
+     */
+    validateQuotation() {
+      const q = this.quotation
+      
+      // 检查必填字段
+      if (!q.title) return 'Quotation title is required'
+      if (!q.customerId) return 'Customer is required'
+      if (!q.issueDate) return 'Issue date is required'
+      if (!q.expiryDate) return 'Expiry date is required'
+      if (!q.items || q.items.length === 0) return 'Please add at least one quotation item'
+      
+      // 检查日期逻辑
+      if (new Date(q.issueDate) > new Date(q.expiryDate)) {
+        return 'Expiry date must be after issue date'
+      }
+      
+      // 检查item有效性
+      for (let i = 0; i < q.items.length; i++) {
+        const item = q.items[i]
+        if (!item.productId) return `Item ${i + 1}: Product is required`
+        if (!item.quantity || parseFloat(item.quantity) <= 0) return `Item ${i + 1}: Quantity must be > 0`
+        if (parseFloat(item.unitPrice) < 0) return `Item ${i + 1}: Unit price cannot be negative`
+      }
+      
+      return null
+    },
   }
 }
 </script>

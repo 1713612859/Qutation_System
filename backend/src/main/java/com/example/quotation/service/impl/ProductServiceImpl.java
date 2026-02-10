@@ -7,9 +7,11 @@ import com.example.quotation.exception.ServiceException;
 import com.example.quotation.mapper.ProductMapper;
 import com.example.quotation.mapper.QuotationItemMapper;
 import com.example.quotation.service.ProductService;
+import lombok.NonNull;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,14 +25,40 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<Product> listAll() {
-        return productMapper.selectList(null);
+
+        QueryWrapper<Product> qw = new QueryWrapper<>();
+        qw.orderByAsc("id");
+        List<Product> products = productMapper.selectList(qw);
+        return getProducts(products);
+    }
+
+    @NonNull
+    private List<Product> getProducts(List<Product> products) {
+        products.forEach(item -> {
+            // 获取税率，默认为0
+            BigDecimal taxRate = item.getTaxRate() != null ? item.getTaxRate() : BigDecimal.ZERO;
+            // 计算未税价
+            if (item.getDefaultPrice() != null) {
+                // 未税价 = 含税价 / (1 + 税率)
+                BigDecimal excludingTaxPrice = item.getDefaultPrice().divide(
+                        BigDecimal.ONE.add(taxRate),
+                        2,
+                        BigDecimal.ROUND_HALF_UP
+                );
+                item.setExcludingTaxPrice(excludingTaxPrice);
+            }
+        });
+        return products;
     }
 
     @Override
     public List<Product> listEnabled() {
         QueryWrapper<Product> qw = new QueryWrapper<>();
         qw.eq("enabled", true);
-        return productMapper.selectList(qw);
+        List<Product> products = productMapper.selectList(qw);
+
+
+        return getProducts(products);
     }
 
     @Override

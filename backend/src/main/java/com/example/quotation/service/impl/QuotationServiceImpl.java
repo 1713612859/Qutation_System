@@ -1,3 +1,4 @@
+
 package com.example.quotation.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -28,7 +29,7 @@ import java.util.List;
  * 1. 报价单的创建、更新、删除
  * 2. 从套餐创建报价单
  * 3. 报价单状态流转（提交、审批、拒绝）
- * 4. 报价单金额自动计算（价外税模式）
+ * 4. 报价单金额自动计算（价外税+EWT模式）
  * 5. 报价明细项的金额计算
  *
  * @author System
@@ -64,7 +65,7 @@ public class QuotationServiceImpl implements QuotationService {
      * 逻辑：
      * 1. 如果是新增，自动生成报价单号和初始状态
      * 2. 保存报价明细项，并计算每行的金额
-     * 3. 计算报价单总价（小计、折扣、税额、总计）
+     * 3. 计算报价单总价（小计、折扣、EWT、税额、总计）
      *
      * @param q 报价单对象
      * @return 保存后的报价单对象
@@ -90,6 +91,11 @@ public class QuotationServiceImpl implements QuotationService {
             quotationMapper.updateById(q);
         }
 
+        // 初始化ewt为0如果未设置
+        if(q.getEwt() == null) {
+            q.setEwt(BigDecimal.ZERO);
+        }
+
         // 保存报价明细项（先删除旧的，再插入新的）
         if(q.getItems() != null && !q.getItems().isEmpty()) {
             // 删除该报价单的所有明细项
@@ -102,8 +108,8 @@ public class QuotationServiceImpl implements QuotationService {
             for(QuotationItem item : q.getItems()) {
                 item.setQuotationId(q.getId());
                 item.setLineNumber(lineNumber++);
-                // 计算每行的金额（行小计、税额、行总计）
-                calculateLineTotal(item);
+                // 计算每行的金额（行小计、税额、EWT、行总计）
+                calculateLineTotal(item, q.getEwt());
                 quotationItemMapper.insert(item);
             }
         } else {
@@ -165,6 +171,7 @@ public class QuotationServiceImpl implements QuotationService {
         quotation.setStatus("DRAFT");
         quotation.setIssueDate(LocalDate.now());
         quotation.setCreatedAt(LocalDateTime.now());
+        quotation.setEwt(BigDecimal.ZERO); // 默认EWT为0
 
         quotationMapper.insert(quotation);
 
@@ -196,8 +203,8 @@ public class QuotationServiceImpl implements QuotationService {
                 // 税率优先级：套餐项税率 > 产品税率 > 系统默认税率 (假设均为小数，如 0.12)
                 item.setTaxRate(pkgItem.getTaxRate() != null ? pkgItem.getTaxRate() : (product.getTaxRate() != null ? product.getTaxRate() : getDefaultTaxRate()));
 
-                // 计算每行的金额
-                calculateLineTotal(item);
+                // 计算每行的金额（EWT从报价单获取）
+                calculateLineTotal(item, quotation.getEwt());
                 quotationItems.add(item);
                 quotationItemMapper.insert(item);
             }
@@ -248,7 +255,6 @@ public class QuotationServiceImpl implements QuotationService {
         record.setApproverId(userId);
         record.setApproverName(user != null ? user.getFullName() : "");
         record.setAction("SUBMIT");
-
         record.setComment("Submit for approval");
         approvalRecordService.save(record);
 
@@ -344,12 +350,22 @@ public class QuotationServiceImpl implements QuotationService {
         return quotation;
     }
 
+    /**
+     * 查询所有报价单
+     * @return 报价单列表
+     */
     @Override
     public List<Quotation> listAll() {
-
-        return quotationMapper.selectList(null);
+        QueryWrapper<Quotation> qw = new QueryWrapper<>();
+        qw.orderByDesc("id");
+        return quotationMapper.selectList(qw);
     }
 
+    /**
+     * 按状态查询报价单
+     * @param status 报价单状态（DRAFT、SUBMITTED、APPROVED、REJECTED）
+     * @return 报价单列表
+     */
     @Override
     public List<Quotation> listByStatus(String status) {
         QueryWrapper<Quotation> qw = new QueryWrapper<>();
@@ -358,6 +374,11 @@ public class QuotationServiceImpl implements QuotationService {
         return quotationMapper.selectList(qw);
     }
 
+    /**
+     * 按客户查询报价单
+     * @param customerId 客户ID
+     * @return 报价单列表
+     */
     @Override
     public List<Quotation> listByCustomerId(Long customerId) {
         QueryWrapper<Quotation> qw = new QueryWrapper<>();
@@ -366,6 +387,11 @@ public class QuotationServiceImpl implements QuotationService {
         return quotationMapper.selectList(qw);
     }
 
+    /**
+     * 按ID查找报价单（包含明细项）
+     * @param id 报价单ID
+     * @return 报价单对象
+     */
     @Override
     public Quotation findById(Long id) {
         Quotation quotation = quotationMapper.selectById(id);
@@ -375,6 +401,11 @@ public class QuotationServiceImpl implements QuotationService {
         return quotation;
     }
 
+    /**
+     * 查询报价单明细项
+     * @param quotationId 报价单ID
+     * @return 明细项列表
+     */
     @Override
     public List<QuotationItem> listItems(Long quotationId) {
         QueryWrapper<QuotationItem> qw = new QueryWrapper<>();
@@ -386,10 +417,12 @@ public class QuotationServiceImpl implements QuotationService {
     /**
      * 计算报价单总价
      * 计算逻辑：
-     * 1. 汇总所有明细项的行小计（已含行级折扣，且不含税）得到报价单小计
-     * 2. 汇总所有明细项的税额得到报价单总税额
-     * 3. 应用报价单级别的折扣（如果有）
-     * 4. 总价 = 小计（扣除报价单折扣后）+ 总税额
+     * 1. subtotal = 汇总所有明细项的行不含税净价（LineSubtotal）之和
+     * 2. ewtAmount = 汇总所有明细项的EWT扣除额（LineEWT）之和
+     * 3. taxAmount = 汇总所有明细项的税额（LineTax）之和
+     * 4. discountAmount = 汇总所有明细项的折扣金额之和
+     * 5. 最终小计 = subtotal
+     * 6. 最终总价 = 最终小计 - ewtAmount + taxAmount
      *
      * @param quotation 报价单对象（需要先保存明细项）
      */
@@ -401,40 +434,45 @@ public class QuotationServiceImpl implements QuotationService {
         if(CollectionUtils.isEmpty(items)) {
             quotation.setSubtotal(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
             quotation.setDiscountAmount(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
+            quotation.setEwtAmount(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP)); // EWT总额
             quotation.setTaxAmount(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
             quotation.setTotal(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP));
             return;
         }
 
-        BigDecimal subtotalBeforeQuoteDiscount = BigDecimal.ZERO; // 所有行不含税净价之和
-        BigDecimal totalTax = BigDecimal.ZERO;
+        BigDecimal subtotal = BigDecimal.ZERO;        // 汇总行不含税净价
+        BigDecimal totalEWT = BigDecimal.ZERO;        // 汇总EWT
+        BigDecimal totalTax = BigDecimal.ZERO;        // 汇总税额
+        BigDecimal totalDiscount = BigDecimal.ZERO;   // 汇总行折扣
 
         // 汇总所有明细项的金额
         for(QuotationItem item : items) {
-            // 累计行小计（LineSubtotal 存储的是不含税净价）
-            subtotalBeforeQuoteDiscount = subtotalBeforeQuoteDiscount.add(item.getLineSubtotal() != null ? item.getLineSubtotal() : BigDecimal.ZERO);
+            // 累计行不含税净价（LineSubtotal 存储的是不含税净价）
+            subtotal = subtotal.add(item.getLineSubtotal() != null ? item.getLineSubtotal() : BigDecimal.ZERO);
+            // 累计EWT
+            totalEWT = totalEWT.add(item.getLineEWT() != null ? item.getLineEWT() : BigDecimal.ZERO);
             // 累计税额（LineTax 存储的是该行的税额）
             totalTax = totalTax.add(item.getLineTax() != null ? item.getLineTax() : BigDecimal.ZERO);
+            // 累计折扣
+            totalDiscount = totalDiscount.add(item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO);
         }
 
-        BigDecimal finalSubtotal = subtotalBeforeQuoteDiscount;
-        BigDecimal quoteDiscountAmount = BigDecimal.ZERO;
+        // 精确舍入
+        subtotal = subtotal.setScale(SCALE, RoundingMode.HALF_UP);
+        totalEWT = totalEWT.setScale(SCALE, RoundingMode.HALF_UP);
+        totalTax = totalTax.setScale(SCALE, RoundingMode.HALF_UP);
+        totalDiscount = totalDiscount.setScale(SCALE, RoundingMode.HALF_UP);
 
-        // 应用报价单级别的折扣 (注意: 此处折扣逻辑取决于您的业务规则，假设折扣是直接减去一个金额)
-        if(quotation.getDiscountAmount() != null && quotation.getDiscountAmount().compareTo(BigDecimal.ZERO) > 0) {
-            quoteDiscountAmount = quotation.getDiscountAmount().setScale(SCALE, RoundingMode.HALF_UP);
-            // 最终小计 = 汇总行小计 - 报价单级别折扣
-            finalSubtotal = finalSubtotal.subtract(quoteDiscountAmount);
-        }
+        // 计算最终价格
+        // 最终总价 = 不含税净价 - EWT + 税额
+        BigDecimal finalTotal = subtotal.subtract(totalEWT).add(totalTax).setScale(SCALE, RoundingMode.HALF_UP);
 
-        // 总价 = 最终小计 + 总税额
-        BigDecimal finalTotal = finalSubtotal.add(totalTax);
-
-        // 设置计算结果，并使用四舍五入
-        quotation.setSubtotal(finalSubtotal.setScale(SCALE, RoundingMode.HALF_UP));
-        quotation.setDiscountAmount(quoteDiscountAmount.setScale(SCALE, RoundingMode.HALF_UP));
-        quotation.setTaxAmount(totalTax.setScale(SCALE, RoundingMode.HALF_UP));
-        quotation.setTotal(finalTotal.setScale(SCALE, RoundingMode.HALF_UP));
+        // 设置计算结果
+        quotation.setSubtotal(subtotal);
+        quotation.setDiscountAmount(totalDiscount);
+        quotation.setEwtAmount(totalEWT); // 设置EWT总额
+        quotation.setTaxAmount(totalTax);
+        quotation.setTotal(finalTotal);
     }
 
     /**
@@ -477,61 +515,89 @@ public class QuotationServiceImpl implements QuotationService {
         quotationMapper.deleteById(id);
     }
 
+    /**
+     * 按用户查找报价单
+     * @param userId 用户ID
+     * @return 报价单列表
+     */
     @Override
-    public List<Quotation> listByUserId(Long id) {
+    public List<Quotation> listByUserId(Long userId) {
         QueryWrapper<Quotation> qw = new QueryWrapper<>();
-        qw.eq("created_by", id);
+        qw.eq("created_by", userId);
         return quotationMapper.selectList(qw);
     }
 
     /**
-     * 【已修改】计算报价明细行的金额 (价外税模式)
-     * 计算逻辑：
-     * 1. 原始行不含税小计 = 数量 × 单价
-     * 2. 行折扣金额 = 原始行不含税小计 × 折扣百分比 / 100  (统一将折扣视为百分比)
-     * 3. 最终行小计（LineSubtotal，不含税净价）= 原始行不含税小计 - 行折扣金额
-     * 4. 税额（LineTax） = 最终行小计 × 税率 (假设税率已是小数，如 0.12)
-     * 5. 行总计（LineTotal）= 最终行小计 + 税额
+     * 【NEW】计算报价明细行的金额 (价外税+EWT模式)
+     *
+     * 计算流程：
+     *   1. 反算不含税单价（如果有税）：unitPrice ÷ (1 + taxRate) 
+     *   2. 原始行不含税小计 = 数量 × 不含税单价
+     *   3. 应用折扣：行折扣金额 = 原始小计 × 折扣百分比 / 100
+     *   4. 折扣后不含税价 = 原始小计 - 折扣金额
+     *   5. 计算EWT：EWT = 折扣后不含税价 × EWT比例
+     *   6. 计算税额：LineTax = 折扣后不含税价 × 税率
+     *   7. LineSubtotal = 折扣后不含税价（供汇总用，不含税也不含EWT）
+     *   8. LineEWT = EWT扣除额
+     *   9. LineTotal = 折扣后不含税价 - EWT（用于UI显示）
+     *
+     * 关键点：
+     * - unitPrice的含义取决于taxRate：
+     *   ✓ 当 taxRate > 0 时，unitPrice = 含税价，需要反算得到不含税单价
+     *   ✓ 当 taxRate = 0 时，unitPrice = 不含税价，无需计算
+     * - EWT和税额都是基于"折扣后的不含税价"计算，相互独立
+     * - LineSubtotal用于汇总，是不含税净价
+     * - LineEWT和LineTax分别保存，便于显示和查询
      *
      * @param item 报价明细项对象
+     * @param ewtRate EWT比例（从报价单传入，0 / 0.01 / 0.02）
      */
-    private void calculateLineTotal(QuotationItem item) {
+    private void calculateLineTotal(QuotationItem item, BigDecimal ewtRate) {
         BigDecimal quantity = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
         BigDecimal unitPrice = item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO;
-        // 折扣：假设前端传入的是百分比数值 (如 10 代表 10%)
         BigDecimal discountPercentage = item.getDiscount() != null ? item.getDiscount() : BigDecimal.ZERO;
-        // 税率：假设存储的是小数 (如 0.12 代表 12%)
         BigDecimal taxRate = item.getTaxRate() != null ? item.getTaxRate() : BigDecimal.ZERO;
+        BigDecimal ewt = ewtRate != null ? ewtRate : BigDecimal.ZERO;
 
-        // 1. 原始行不含税小计 (Raw Net Subtotal)
-        BigDecimal rawSubtotal = quantity.multiply(unitPrice).setScale(CALCULATE_SCALE, RoundingMode.HALF_UP);
+        // 1. 关键：根据税率判断unitPrice的含义
+        BigDecimal netUnitPrice = unitPrice;
+        if(taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            // 如果有税率，unitPrice是含税价，反算不含税单价
+            // 公式：不含税单价 = 含税价 ÷ (1 + 税率)
+            netUnitPrice = unitPrice.divide(BigDecimal.ONE.add(taxRate), CALCULATE_SCALE, RoundingMode.HALF_UP);
+        }
+        // 如果taxRate = 0，unitPrice已是不含税价，无需转换
 
+        // 2. 原始行不含税小计 = 数量 × 不含税单价
+        BigDecimal rawNetSubtotal = quantity.multiply(netUnitPrice).setScale(CALCULATE_SCALE, RoundingMode.HALF_UP);
+
+        // 3. 应用折扣
         BigDecimal finalDiscountAmount = BigDecimal.ZERO;
-        BigDecimal lineSubtotal = rawSubtotal; // 默认等于原始小计
+        BigDecimal netSubtotalAfterDiscount = rawNetSubtotal;
 
-        // 2. 计算折扣金额 (统一按百分比处理)
         if(discountPercentage.compareTo(BigDecimal.ZERO) > 0) {
-            // 折扣金额 = 原始小计 * 折扣百分比 / 100
-            finalDiscountAmount = rawSubtotal.multiply(discountPercentage)
+            // 折扣金额 = 原始小计 × 折扣百分比 / 100
+            finalDiscountAmount = rawNetSubtotal.multiply(discountPercentage)
                     .divide(new BigDecimal("100"), CALCULATE_SCALE, RoundingMode.HALF_UP);
 
-            // 最终行不含税净价 = 原始小计 - 折扣金额
-            lineSubtotal = rawSubtotal.subtract(finalDiscountAmount).setScale(SCALE, RoundingMode.HALF_UP);
-        } else {
-            lineSubtotal = lineSubtotal.setScale(SCALE, RoundingMode.HALF_UP);
+            // 折扣后不含税价 = 原始小计 - 折扣金额
+            netSubtotalAfterDiscount = rawNetSubtotal.subtract(finalDiscountAmount).setScale(CALCULATE_SCALE, RoundingMode.HALF_UP);
         }
 
-        // 3. 设置折扣金额和最终行小计（LineSubtotal 为不含税净价）
+        // 4. 计算EWT（基于折扣后不含税价）
+        BigDecimal lineEWT = netSubtotalAfterDiscount.multiply(ewt).setScale(SCALE, RoundingMode.HALF_UP);
+
+        // 5. 计算税额（基于折扣后不含税价）
+        BigDecimal lineTax = netSubtotalAfterDiscount.multiply(taxRate).setScale(SCALE, RoundingMode.HALF_UP);
+
+        // 6. 设置各字段
+        item.setLineSubtotal(netSubtotalAfterDiscount.setScale(SCALE, RoundingMode.HALF_UP)); // 不含税净价，供汇总用
         item.setDiscountAmount(finalDiscountAmount.setScale(SCALE, RoundingMode.HALF_UP));
-        item.setLineSubtotal(lineSubtotal);
+        item.setLineEWT(lineEWT); // EWT扣除额
+        item.setLineTax(lineTax); // 税额
 
-        // 4. 计算税额 (价外税模式：税额 = 不含税净价 * 税率)
-        // 假设 taxRate 已经是小数 (0.12)，无需再除以 100
-        BigDecimal lineTax = lineSubtotal.multiply(taxRate).setScale(SCALE, RoundingMode.HALF_UP);
-        item.setLineTax(lineTax);
-
-        // 5. 计算行总计 = 最终行小计 + 税额
-        item.setLineTotal(lineSubtotal.add(lineTax).setScale(SCALE, RoundingMode.HALF_UP));
+        // LineTotal = 不含税净价 - EWT（用于UI显示）
+        item.setLineTotal(netSubtotalAfterDiscount.subtract(lineEWT).setScale(SCALE, RoundingMode.HALF_UP));
     }
 
     /**
@@ -550,7 +616,7 @@ public class QuotationServiceImpl implements QuotationService {
     }
 
     /**
-     * 【已修改】获取系统默认税率 (返回小数形式，如 0.12)
+     * 获取系统默认税率 (返回小数形式，如 0.12)
      * 优先级：系统设置 > 默认值0.12
      *
      * @return 默认税率（小数形式，如 0.12）

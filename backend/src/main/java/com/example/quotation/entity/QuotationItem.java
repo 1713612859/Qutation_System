@@ -1,6 +1,7 @@
 
 package com.example.quotation.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -104,4 +105,10 @@ public class QuotationItem {
      * 行总计（含税总额 = 行小计 - 折扣金额 + 行税额）
      */
     private BigDecimal lineTotal;
+
+    /**
+     * ewt 商品行金额
+     */
+    @TableField(value = "line_ewt")
+    private BigDecimal lineEWT;
 }

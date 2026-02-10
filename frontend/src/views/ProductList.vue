@@ -44,6 +44,22 @@
           {{ getBrandName(item.brandId) }}
         </template>
 
+        <template v-slot:item.minimumPrice="{ item }">
+          {{ item.minimumPrice ? item.minimumPrice.toFixed(2) : '0.00' }}
+        </template>
+
+        <template v-slot:item.excludingTaxPrice="{ item }">
+          {{ item.excludingTaxPrice ? item.excludingTaxPrice.toFixed(2) : '0.00' }}
+        </template>
+
+        <template v-slot:item.currentStock="{ item }">
+          {{ item.currentStock ? item.currentStock.toFixed(2) : '0.00' }}
+        </template>
+
+        <template v-slot:item.taxRate="{ item }">
+          {{ item.taxRate ? (item.taxRate * 100).toFixed(2) : '0.00' }}%
+        </template>
+
         <template v-slot:item.enabled="{ item }">
           <v-chip :color="item.enabled ? 'success' : 'error'" dark small>
             {{ item.enabled ? 'Enabled' : 'Disabled' }}
@@ -73,7 +89,10 @@
               <span class="text-body-2">SKU: {{ item.sku }}</span>
               <span class="text-body-2">Category: {{ getCategoryFullName(item.categoryId) }}</span>
               <span class="text-body-2">Brand: {{ getBrandName(item.brandId) }}</span>
-              <span class="text-body-2">Price: {{ item.defaultPrice }}</span>
+              <span class="text-body-2">Retail Price: ¥{{ item.defaultPrice?.toFixed(2) || '0.00' }}</span>
+              <span class="text-body-2">Excluding Tax Price: ¥{{ item.excludingTaxPrice?.toFixed(2) || '0.00' }}</span>
+              <span class="text-body-2">Stock: {{ item.currentStock?.toFixed(2) || '0' }}</span>
+              <span class="text-body-2" v-if="item.remark">Remark: {{ item.remark }}</span>
               <v-chip :color="item.enabled ? 'success' : 'error'" dark x-small class="mt-1">
                 {{ item.enabled ? 'Enabled' : 'Disabled' }}
               </v-chip>
@@ -169,14 +188,14 @@
 
             <v-row dense>
               <v-col cols="12" sm="6">
-                <v-text-field
-                    v-model.number="form.taxRate"
-                    type="number"
-                    label="Tax Rate (%)"
-                    step="0.01"
-                    :rules="[rules.nonNegative]"
+                <v-select
+                    v-model="form.taxRate"
+                    :items="taxRateOptions"
+                    item-title="title"
+                    item-value="value"
+                    label="Tax Rate"
                     density="compact"
-                ></v-text-field>
+                ></v-select>
               </v-col>
               <v-col cols="12" sm="6">
                 <v-switch
@@ -185,6 +204,51 @@
                     :color="form.enabled ? 'success' : 'error'"
                     density="compact"
                 />
+              </v-col>
+            </v-row>
+
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                    v-model.number="form.minimumPrice"
+                    type="number"
+                    label="Minimum Price"
+                    step="0.01"
+                    
+                    density="compact"
+                ></v-text-field>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                    v-model.number="form.excludingTaxPrice"
+                    type="number"
+                    label="Excluding Tax Price"
+                    step="0.01"
+                    :readonly="true"
+                    density="compact"
+                ></v-text-field>
+              </v-col>
+            </v-row>
+
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                    v-model.number="form.currentStock"
+                    type="number"
+                    label="Current Stock"
+                    step="0.01"
+                    :rules="[rules.nonNegative]"
+                    density="compact"
+                ></v-text-field>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                    v-model="form.remark"
+                    label="Remark"
+                    maxlength="200"
+                    counter
+                    density="compact"
+                ></v-text-field>
               </v-col>
             </v-row>
           </v-form>
@@ -214,37 +278,54 @@ export default {
       brands: [],     // 品牌列表
       showDialog: false,
       formValid: false,
-      form: {
-        enabled: true,
-        taxRate: 12,
-        defaultPrice: 0,
+      taxRateOptions: [
+        { title: '0%', value: 0 },
+        { title: '12%', value: 0.12 }
+      ],
+      form: {},
+      formDefault: {
+        sku: '',
+        name: '',
+        description: '',
         categoryId: null,
         brandId: null,
+        unit: '',
+        defaultPrice: 0,
+        minimumPrice: 0,
+        excludingTaxPrice: 0,
+        taxRate: 0.12,
+        currentStock: 0,
+        remark: '',
+        enabled: true,
       },
       headers: [
         { title: 'ID', key: 'id', sortable: true },
         { title: 'SKU', key: 'sku', sortable: true },
         { title: 'Product Name', key: 'name', sortable: true },
-        { title: 'Category', key: 'categoryName', sortable: false },
-        { title: 'Brand', key: 'brandName', sortable: false },
+        { title: 'Category', key: 'categoryName', sortable: true },
+        { title: 'Brand', key: 'brandName', sortable: true },
         { title: 'Unit', key: 'unit', sortable: true },
-        { title: 'Non-VAT Price', key: 'defaultPrice', sortable: true },
+        { title: 'Retail Price', key: 'defaultPrice', sortable: true },
+        { title: 'Excluding Tax Price', key: 'excludingTaxPrice', sortable: true },
+        {title: 'Minimum Price', key: 'minimumPrice', sortable: true },
+        { title: 'Current Stock', key: 'currentStock', sortable: true },
         { title: 'Tax Rate (%)', key: 'taxRate', sortable: true },
         { title: 'Status', key: 'enabled', sortable: true },
+        {title: 'Remark', key: 'remark', sortable: false },
         { title: 'Actions', key: 'actions', sortable: false, align: 'end' },
       ],
       rules: {
         required: (v) => !!v || 'Required field cannot be empty',
-        nonNegative: (v) => v >= 0 || 'Value cannot be less than 0',
-        checkSku: async (v) => {
+        nonNegative: (v) => (v !== null && v !== '' && Number(v) >= 0) || 'Value cannot be less than 0',
+        checkSku:  (v) => {
           if (!v) return 'SKU cannot be empty'
-          try {
-            const res = await api.get(`/products/checkSku`, { params: { sku: v, id: this.form.id } })
-            return res.data.valid || 'SKU already exists'
-          } catch (e) {
-            return true
-          }
+       
         },
+        minPriceLessThanDefault: (v) => {
+          if (!v || !this.form.defaultPrice) return true
+          return Number(v) <= Number(this.form.defaultPrice) || 'Minimum price cannot exceed default price'
+        },
+        descriptionMaxLength: (v) => !v || v.length <= 500 || 'Description cannot exceed 500 characters',
       },
     }
   },
@@ -257,8 +338,11 @@ export default {
           (item) =>
               item.sku?.toLowerCase().includes(s) ||
               item.name?.toLowerCase().includes(s) ||
+              item.description?.toLowerCase().includes(s) ||
+              item.remark?.toLowerCase().includes(s) ||
               this.getCategoryFullName(item.categoryId)?.toLowerCase().includes(s) ||
-              this.getBrandName(item.brandId)?.toLowerCase().includes(s)
+              this.getBrandName(item.brandId)?.toLowerCase().includes(s) ||
+              item.unit?.toLowerCase().includes(s)
       )
     },
   },
@@ -278,9 +362,11 @@ export default {
       try {
         const res = await api.get('/products')
         this.list = res.data.data.map(item => ({
+          ...this.formDefault,  // 保证所有字段都存在
           ...item,
           categoryId: item.categoryId || null,
           brandId: item.brandId || null,
+          taxRate: typeof item.taxRate === 'number' ? item.taxRate : 0.12,
         }))
       } catch (e) {
         this.$snackbar.show('Failed to load products', 'error')
@@ -355,15 +441,18 @@ export default {
     },
 
     openDialog() {
-      this.form = { enabled: true, taxRate: 12, defaultPrice: 0, categoryId: null, brandId: null }
+      this.form = JSON.parse(JSON.stringify(this.formDefault))
       this.showDialog = true
       this.$nextTick(() => this.$refs.formRef?.resetValidation())
     },
     edit(row) {
+      // 深拷贝并合并默认值，确保所有字段都存在
       this.form = {
+        ...this.formDefault,
         ...row,
         categoryId: row.categoryId || null,
-        brandId: row.brandId || null
+        brandId: row.brandId || null,
+        taxRate: typeof row.taxRate === 'number' ? row.taxRate : 0.12,
       }
       this.showDialog = true
       this.$nextTick(() => this.$refs.formRef?.resetValidation())

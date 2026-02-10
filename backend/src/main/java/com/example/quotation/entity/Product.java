@@ -40,13 +40,13 @@ public class Product {
      */
     private String unit;
     /**
-     * 默认价格
+     * 默认价格 》 默认价格为 含税价格
      */
     private BigDecimal defaultPrice;
     /**
      * 默认税率
      * <p>
-     * 默认为0  0表示没有税率 ，0.12 表示12%
+     * 默认为0  0.00表示没有税率 ，0.12 表示12%
      */
 
     private BigDecimal taxRate; // 默认税率
@@ -68,4 +68,30 @@ public class Product {
      * 更新时间
      */
     private LocalDateTime updatedAt;
+
+
+    //2026年2月10日13:34:08
+
+    /**
+     * 最低价
+     */
+    private BigDecimal minimumPrice;
+
+    /**
+     *Price excluding tax 不含税的价格
+     */
+    @TableField(exist = false)
+    private BigDecimal excludingTaxPrice;
+
+    /**
+     *当前库存，手动输入，不会扣减
+     */
+    private BigDecimal currentStock;
+
+
+    /**
+     *备注
+     */
+    private String remark;
+
 }
