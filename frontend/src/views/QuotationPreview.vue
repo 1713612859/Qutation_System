@@ -6,7 +6,8 @@
     <div class="header">
       <div class="company-info">
         <h2></h2>
-        <p class="company-address">Don Benito, F.B Harrison, Don B. Hernandez, Pasay City, 1300 Metro Manila</p>
+        <p class="company-address">Eastfield Center
+          Mall of Asia Complex, Diosdado Macapagal Blvd, Pasay City, 1300 Metro Manila</p>
         <p class="company-contact">Email: sales@zuno.ph | Tel: +63 0917-446-9999</p>
       </div>
     </div>
