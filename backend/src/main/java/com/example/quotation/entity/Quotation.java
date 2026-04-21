@@ -165,7 +165,7 @@ public class Quotation {
 
 
     /**
-     * exclude withholding tax
+     * Exclude withholding tax
      *
      *  默认 是 1% 商品类 或者  2% 服务类
      *  计算公式为 商品去税 ，基于去税价 在 折扣 1%
@@ -173,7 +173,10 @@ public class Quotation {
      */
     private BigDecimal ewt;
 
-
+    /**
+     * Exclude withholding tax :
+     * EWT价格
+     */
     @TableField(value = "ewt_amount")
     private BigDecimal ewtAmount;
 

@@ -10,7 +10,8 @@
         <java.version>1.8</java.version>
         <spring.boot.version>2.7.12</spring.boot.version>
         <mybatis.plus.version>3.5.4</mybatis.plus.version>
-    </properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>    </properties>
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>

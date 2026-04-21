@@ -369,7 +369,6 @@ const exportPdf = async () => {
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
-      allowTaint: true,
       backgroundColor: '#ffffff',
       windowWidth: element.scrollWidth,
       windowHeight: element.scrollHeight,
@@ -391,22 +390,44 @@ const exportPdf = async () => {
 
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-
     const imgWidth = pageWidth;
     const imgHeight = (canvas.height * pageWidth) / canvas.width;
 
-    let remainingHeight = imgHeight;
-    let position = 0;
+    // --- Smart page break: scan canvas pixels to find white rows as safe cut points ---
+    // This avoids relying on DOM layout measurements which can differ from html2canvas rendering.
+    const pageHeightPx = Math.round((pageHeight / imgHeight) * canvas.height);
+    // Search up to 25% of page height backwards to find a white gap row
+    const searchRangePx = Math.round(pageHeightPx * 0.25);
+    const LIGHT = 242; // pixel brightness threshold for "background white"
+    const STEP = 6;    // sample every 6th pixel horizontally for speed
+    const ctx2d = canvas.getContext('2d');
 
-    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-    remainingHeight -= pageHeight;
+    const isWhiteRow = (y) => {
+      const d = ctx2d.getImageData(0, y, canvas.width, 1).data;
+      for (let i = 0; i < d.length; i += 4 * STEP) {
+        if (d[i] < LIGHT || d[i + 1] < LIGHT || d[i + 2] < LIGHT) return false;
+      }
+      return true;
+    };
 
-    while (remainingHeight > 0) {
-      position -= pageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-      remainingHeight -= pageHeight;
+    const pageStartsPx = [0];
+    let targetPx = pageHeightPx;
+    while (targetPx < canvas.height) {
+      const lastPx = pageStartsPx[pageStartsPx.length - 1];
+      let cutPx = targetPx;
+      // Walk backwards from the target cut to find the nearest all-white row
+      for (let y = targetPx; y > Math.max(targetPx - searchRangePx, lastPx + 1); y--) {
+        if (isWhiteRow(y)) { cutPx = y; break; }
+      }
+      pageStartsPx.push(cutPx);
+      targetPx = cutPx + pageHeightPx;
     }
+
+    pageStartsPx.forEach((startPx, idx) => {
+      const startMm = (startPx / canvas.height) * imgHeight;
+      if (idx > 0) pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, -startMm, imgWidth, imgHeight);
+    });
 
     pdf.save(`Quotation_${quotation.value.quoteNumber}.pdf`);
 
@@ -801,6 +822,8 @@ const exportPdf = async () => {
   justify-content: space-between;
   margin-top: 80px;
   width: 100%;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 .signature-box-final {
   flex-basis: 48%;
