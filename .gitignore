@@ -1,0 +1,31 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+*~
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Node / Frontend
+node_modules/
+dist/
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+
+# Claude Code internals
+.claude/worktrees/

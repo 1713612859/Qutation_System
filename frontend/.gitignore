@@ -1,0 +1,24 @@
+# Build output
+dist/
+dist-ssr/
+
+# Dependencies
+node_modules/
+node_modules/.vite/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TS
+*.tsbuildinfo
