@@ -118,14 +118,19 @@
                   <v-radio label="1% (Products)" :value="0.01"></v-radio>
                   <v-radio label="2% (Services)" :value="0.02"></v-radio>
                 </v-radio-group>
-                <v-checkbox
-                  v-model="quotation.zeroTax"
-                  label="统一0税"
-                  density="compact"
-                  hide-details
-                  class="ml-4"
-                  @update:model-value="recalculateAll"
-                ></v-checkbox>
+                <v-tooltip text="When enabled, all items in this quotation will be tax-exempt (0% tax rate applied)." location="top">
+                  <template v-slot:activator="{ props }">
+                    <v-checkbox
+                      v-bind="props"
+                      v-model="quotation.zeroTax"
+                      label="Zero Tax"
+                      density="compact"
+                      hide-details
+                      class="ml-4"
+                      @update:model-value="recalculateAll"
+                    ></v-checkbox>
+                  </template>
+                </v-tooltip>
               </div>
             </v-col>
           </v-row>
