@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:mysql://120.24.144.173:3306/quotations?useSSL=false&characterEncoding=UTF-8&serverTimezone=UTC
+    url: jdbc:mysql://120.24.144.173:3306/quotations_test?useSSL=false&characterEncoding=UTF-8&serverTimezone=UTC
     username: root
     password: 123lyl
     driver-class-name: com.mysql.cj.jdbc.Driver

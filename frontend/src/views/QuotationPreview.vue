@@ -59,8 +59,8 @@
             </div>
           </td>
           <td class="text-center">{{ item.quantity }}</td>
-          <td class="text-right">{{ format(item.unitPrice) }}</td>
-          <td class="line-total text-right">{{ format(item.quantity * item.unitPrice )}}</td>
+          <td class="text-right">{{ quotation.zeroTax && item.taxRate > 0 ? format(item.unitPrice / (1 + item.taxRate)) : format(item.unitPrice) }}</td>
+          <td class="line-total text-right">{{ quotation.zeroTax && item.taxRate > 0 ? format(item.quantity * (item.unitPrice / (1 + item.taxRate))) : format(item.quantity * item.unitPrice) }}</td>
         </tr>
         </tbody>
       </table>
@@ -79,7 +79,7 @@
             <span class="label">Less EWT Amount:</span>
             <span class="value">-{{ quotation.currency }} {{ format(quotation.ewtAmount) }}</span>
           </div>
-          <div class="total-row tax-row">
+          <div v-if="!quotation.zeroTax" class="total-row tax-row">
             <span class="label">VAT Amount (12%):</span>
             <span class="value">{{ quotation.currency }} {{ format(quotation.taxAmount) }}</span>
           </div>
@@ -319,6 +319,7 @@ if (quoteId) {
       quotation.value.items.forEach(item => {
         item.lineTotal = parseFloat(item.lineTotal) || 0;
         item.unitPrice = parseFloat(item.unitPrice) || 0;
+        item.taxRate = parseFloat(item.taxRate) || 0;
         item.packageName = item.packageName || null;
       });
 

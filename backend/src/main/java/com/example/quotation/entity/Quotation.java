@@ -165,6 +165,12 @@ public class Quotation {
 
 
     /**
+     * 统一0税：启用后所有明细行税率强制按0计算（原始taxRate字段不变）
+     */
+    @TableField("zero_tax")
+    private Boolean zeroTax;
+
+    /**
      * Exclude withholding tax
      *
      *  默认 是 1% 商品类 或者  2% 服务类

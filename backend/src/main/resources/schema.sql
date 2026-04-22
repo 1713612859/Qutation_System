@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS `quotations` (
   `expiry_date` DATE,
   `package_id` BIGINT,
   `notes` TEXT,
+  `zero_tax` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '统一0税：启用后所有明细税率按0计算',
   `created_at` DATETIME,
   `updated_at` DATETIME,
   FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`),

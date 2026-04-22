@@ -109,7 +109,7 @@ public class QuotationServiceImpl implements QuotationService {
                 item.setQuotationId(q.getId());
                 item.setLineNumber(lineNumber++);
                 // 计算每行的金额（行小计、税额、EWT、行总计）
-                calculateLineTotal(item, q.getEwt());
+                calculateLineTotal(item, q.getEwt(), Boolean.TRUE.equals(q.getZeroTax()));
                 quotationItemMapper.insert(item);
             }
         } else {
@@ -203,8 +203,8 @@ public class QuotationServiceImpl implements QuotationService {
                 // 税率优先级：套餐项税率 > 产品税率 > 系统默认税率 (假设均为小数，如 0.12)
                 item.setTaxRate(pkgItem.getTaxRate() != null ? pkgItem.getTaxRate() : (product.getTaxRate() != null ? product.getTaxRate() : getDefaultTaxRate()));
 
-                // 计算每行的金额（EWT从报价单获取）
-                calculateLineTotal(item, quotation.getEwt());
+                // 计算每行的金额（EWT从报价单获取，zeroTax统一0税标志）
+                calculateLineTotal(item, quotation.getEwt(), Boolean.TRUE.equals(quotation.getZeroTax()));
                 quotationItems.add(item);
                 quotationItemMapper.insert(item);
             }
@@ -552,21 +552,22 @@ public class QuotationServiceImpl implements QuotationService {
      * @param item 报价明细项对象
      * @param ewtRate EWT比例（从报价单传入，0 / 0.01 / 0.02）
      */
-    private void calculateLineTotal(QuotationItem item, BigDecimal ewtRate) {
+    private void calculateLineTotal(QuotationItem item, BigDecimal ewtRate, boolean zeroTax) {
         BigDecimal quantity = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
         BigDecimal unitPrice = item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO;
         BigDecimal discountPercentage = item.getDiscount() != null ? item.getDiscount() : BigDecimal.ZERO;
         BigDecimal taxRate = item.getTaxRate() != null ? item.getTaxRate() : BigDecimal.ZERO;
+        // 统一0税启用时，计算用税率强制为0；原始taxRate字段不改动
+        BigDecimal effectiveTaxRate = zeroTax ? BigDecimal.ZERO : taxRate;
         BigDecimal ewt = ewtRate != null ? ewtRate : BigDecimal.ZERO;
 
-        // 1. 关键：根据税率判断unitPrice的含义
+        // 1. 反算净价始终用原始 taxRate（含税112，税率12% → 净价100，即使 zeroTax 启用）
         BigDecimal netUnitPrice = unitPrice;
         if(taxRate.compareTo(BigDecimal.ZERO) > 0) {
-            // 如果有税率，unitPrice是含税价，反算不含税单价
-            // 公式：不含税单价 = 含税价 ÷ (1 + 税率)
+            // unitPrice是含税价，反算不含税单价：净价 = 含税价 ÷ (1 + 原始税率)
             netUnitPrice = unitPrice.divide(BigDecimal.ONE.add(taxRate), CALCULATE_SCALE, RoundingMode.HALF_UP);
         }
-        // 如果taxRate = 0，unitPrice已是不含税价，无需转换
+        // taxRate = 0 时，unitPrice已是不含税价，无需转换
 
         // 2. 原始行不含税小计 = 数量 × 不含税单价
         BigDecimal rawNetSubtotal = quantity.multiply(netUnitPrice).setScale(CALCULATE_SCALE, RoundingMode.HALF_UP);
@@ -587,8 +588,8 @@ public class QuotationServiceImpl implements QuotationService {
         // 4. 计算EWT（基于折扣后不含税价）
         BigDecimal lineEWT = netSubtotalAfterDiscount.multiply(ewt).setScale(SCALE, RoundingMode.HALF_UP);
 
-        // 5. 计算税额（基于折扣后不含税价）
-        BigDecimal lineTax = netSubtotalAfterDiscount.multiply(taxRate).setScale(SCALE, RoundingMode.HALF_UP);
+        // 5. 计算税额（基于折扣后不含税价，使用有效税率）
+        BigDecimal lineTax = netSubtotalAfterDiscount.multiply(effectiveTaxRate).setScale(SCALE, RoundingMode.HALF_UP);
 
         // 6. 设置各字段
         item.setLineSubtotal(netSubtotalAfterDiscount.setScale(SCALE, RoundingMode.HALF_UP)); // 不含税净价，供汇总用

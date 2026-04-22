@@ -111,13 +111,21 @@
           </v-row>
           <v-row>
             <v-col cols="12">
-              <div class="d-flex align-center">
+              <div class="d-flex align-center flex-wrap gap-4">
                 <span class="mr-4 font-weight-medium">EWT (Withholding Tax):</span>
                 <v-radio-group v-model.number="quotation.ewt" inline class="mt-0" @update:model-value="recalculateAll">
                   <v-radio label="None" :value="0"></v-radio>
                   <v-radio label="1% (Products)" :value="0.01"></v-radio>
                   <v-radio label="2% (Services)" :value="0.02"></v-radio>
                 </v-radio-group>
+                <v-checkbox
+                  v-model="quotation.zeroTax"
+                  label="统一0税"
+                  density="compact"
+                  hide-details
+                  class="ml-4"
+                  @update:model-value="recalculateAll"
+                ></v-checkbox>
               </div>
             </v-col>
           </v-row>
@@ -249,7 +257,7 @@
             </template>
 
             <template v-slot:item.taxRate="{ item }">
-              {{ (item.taxRate * 100).toFixed(0) || 0 }}%
+              {{ quotation.zeroTax ? '0' : ((item.taxRate * 100).toFixed(0) || 0) }}%
             </template>
 
             <template v-slot:item.lineTax="{ item }">
@@ -346,7 +354,7 @@
                         <v-text-field :model-value="item.discount || 0" label="Discount (%)" density="compact" hide-details readonly></v-text-field>
                       </v-col>
                       <v-col cols="6">
-                        <v-text-field :model-value="(item.taxRate * 100).toFixed(0) || 0" label="Tax Rate (%)" density="compact" hide-details readonly></v-text-field>
+                        <v-text-field :model-value="quotation.zeroTax ? '0' : ((item.taxRate * 100).toFixed(0) || 0)" label="Tax Rate (%)" density="compact" hide-details readonly></v-text-field>
                       </v-col>
                       <v-col cols="6">
                         <v-text-field :model-value="item.lineTax || '0.00'" label="Tax Amount" density="compact" hide-details readonly></v-text-field>
@@ -455,6 +463,7 @@ export default {
         issueDate: this.getTodayDate(),
         expiryDate: this.getDateAfterDays(7),
         ewt: 0,
+        zeroTax: false,
         notes: '',
         bankAccounts: [
           {
@@ -868,32 +877,33 @@ export default {
         d = Math.min(Math.max(d, 0), 100)
         taxRate = Math.min(Math.max(taxRate, 0), 1)
 
-        // 3. 关键：根据税率判断 unitPrice 的含义
+        // 统一0税：税额归0，但反算净价仍用原始taxRate（含税112，税率12% → 净价100）
+        const effectiveTaxRate = this.quotation.zeroTax ? 0 : taxRate
+
+        // 3. 反算净价始终用原始 taxRate（不管 zeroTax 是否启用）
         let netUnitPrice = p
-        
         if (taxRate > 0) {
-          // unitPrice 是含税价，反算不含税单价
+          // unitPrice 是含税价，反算不含税单价：净价 = 含税价 ÷ (1 + 税率)
           netUnitPrice = this.roundNumber(p / (1 + taxRate))
         }
-        // taxRate = 0 时，unitPrice 已是不含税价
 
         // 4. 计算不含税行总额
         const rawNetLineTotal = this.roundNumber(q * netUnitPrice)
-        
+
         // 5. 应用行折扣
         const lineDiscount = this.roundNumber(rawNetLineTotal * (d / 100))
         const netLineTotalAfterDiscount = this.roundNumber(rawNetLineTotal - lineDiscount)
-        
+
         // 6. 计算EWT（基于折扣后不含税价）
         const ewtAmount = this.roundNumber(netLineTotalAfterDiscount * ewt)
-        
-        // 7. 计算税额（基于折扣后不含税价）
-        const lineTax = this.roundNumber(netLineTotalAfterDiscount * taxRate)
-        
+
+        // 7. 计算税额（基于有效税率）
+        const lineTax = this.roundNumber(netLineTotalAfterDiscount * effectiveTaxRate)
+
         // 8. lineTotal用于汇总时的净价（减EWT后）
         const lineTotal = this.roundNumber(netLineTotalAfterDiscount - ewtAmount)
 
-        // 9. 更新数据
+        // 9. 更新数据（taxRate保留原始值，不写入effectiveTaxRate）
         row.quantity = this.roundNumber(q, 4)
         row.unitPrice = this.roundNumber(p)
         row.discount = this.roundNumber(d)
@@ -932,9 +942,10 @@ export default {
             const p = Math.max(parseFloat(i.unitPrice) || 0, 0)
             const d = Math.min(Math.max(parseFloat(i.discount) || 0, 0), 100)
             const t = Math.min(Math.max(parseFloat(i.taxRate) || 0, 0), 1)
+            const effectiveT = this.quotation.zeroTax ? 0 : t
             const ewt = Math.min(Math.max(parseFloat(this.quotation.ewt) || 0, 0), 1)
 
-            // 根据税率判断unitPrice含义：反算不含税单价
+            // 反算净价始终用原始 t（含税112，税率12% → 净价100，即使 zeroTax 启用）
             let netUnitPrice = p
             if (t > 0) {
               netUnitPrice = this.roundNumber(p / (1 + t))
@@ -945,7 +956,7 @@ export default {
             const lineDiscount = this.roundNumber(rawNetLineTotal * (d / 100))
             const netLineTotalAfterDiscount = this.roundNumber(rawNetLineTotal - lineDiscount)
             const lineEWT = this.roundNumber(netLineTotalAfterDiscount * ewt)
-            const lineTax = this.roundNumber(netLineTotalAfterDiscount * t)
+            const lineTax = this.roundNumber(netLineTotalAfterDiscount * effectiveT)
 
             subtotal += netLineTotalAfterDiscount
             discountAmount += lineDiscount
